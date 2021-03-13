@@ -1,6 +1,8 @@
 package com.diploma
 
-import com.diploma.store.game.GameInMemoryStore
+import com.diploma.service.Game
+import com.diploma.store.InMemoryStorage
+import com.diploma.store.Storage
 import io.ktor.application.*
 import io.ktor.http.*
 import io.ktor.http.cio.websocket.*
@@ -15,6 +17,8 @@ import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 import java.time.Duration
 import java.util.*
+import kotlin.collections.HashMap
+import kotlin.collections.LinkedHashMap
 import kotlin.collections.LinkedHashSet
 
 
@@ -30,7 +34,7 @@ fun Application.module(testing: Boolean = false) {
         masking = false
     }
 
-    val gameStore = GameInMemoryStore()
+    // val gameStore = GameInMemoryStore()
 
     routing {
         get("/") {
@@ -43,18 +47,98 @@ fun Application.module(testing: Boolean = false) {
         }
 
         val connections = Collections.synchronizedSet<Connection?>(LinkedHashSet())
+        val games = Collections.synchronizedSet<Game?>(LinkedHashSet())
         webSocket("/user") {
             println("Adding user!")
-            val thisConnection = Connection(this)
+            val thisConnection = Connection(this, null)
             connections += thisConnection
             try {
                 send("You are connected! There are ${connections.count()} users here.")
                 for (frame in incoming) {
                     frame as? Frame.Text ?: continue
                     val receivedText = frame.readText()
-                    val textWithUsername = "[${thisConnection.name}]: $receivedText"
-                    connections.forEach {
-                        it.session.send(textWithUsername)
+                    //val textWithUsername = "[${thisConnection.name}]: $receivedText"
+//                    connections.forEach {
+//                        it.session.send(textWithUsername)
+//                    }
+                }
+            } catch (e: Exception) {
+                println(e.localizedMessage)
+            } finally {
+                println("Removing $thisConnection!")
+                connections -= thisConnection
+            }
+        }
+
+        val module = SerializersModule {
+            polymorphic(WSMessage::class) {
+                subclass(ReceivedAdminCreateMessage::class)
+                subclass(ReceivedAdminJoinMessage::class)
+                subclass(ReceivedAdminAddQstMessage::class)
+                subclass(ReceivedAdminStartRoundMessage::class)
+                default { ReceivedAdminBasicMessage.serializer() }
+            }
+        }
+// ws://localhost:8080/admin
+        webSocket("/admin") {
+            println("Adding user!")
+            val thisConnection = Connection(this, null)
+            connections += thisConnection
+            try {
+                send("You are connected! There are ${connections.count()} users here.")
+                for (frame in incoming) {
+                    frame as? Frame.Text ?: continue
+                    val msg = frame.readText()
+                    try {
+
+                        val format = Json { serializersModule = module }
+                        val message = format.decodeFromString<WSMessage>(msg)
+                        // println("${thisConnection.session}: $message")
+                        if (message is ReceivedAdminCreateMessage) {
+                            if (thisConnection.uuid != null) {
+                                throw MyException("You already have an active session")
+                            }
+                            thisConnection.uuid = UUID.randomUUID()
+                                .also {
+                                    val game = Game(UUID.randomUUID().toString(), it.toString())
+                                    val reply = """{
+                                        "type": "create",
+                                        "code": "${game.code}",
+                                        "admin_id": "${it.toString()}"
+                                        }""".trimIndent()
+                                    send(Frame.Text(reply))
+                                    games.add(game)
+
+                                }
+                                .also { println(it.toString()) }
+
+                        } else {
+
+                            if (thisConnection.uuid == null) {
+                                throw MyException("You don't have any active sessions")
+                            }
+                                when (message) {
+                                    is ReceivedAdminAddQstMessage -> {
+                                    }
+                                    is ReceivedAdminJoinMessage -> {
+                                    }
+                                    is ReceivedAdminStartRoundMessage -> {
+                                    }
+                                    else -> {
+                                        println("Removing $thisConnection!")
+                                        connections -= thisConnection
+                                    }
+                                }
+
+                            println(thisConnection.uuid.toString())
+                        }
+
+                    } catch (e: MyException) {
+                        println(e.message)
+                    } catch (e: IllegalArgumentException) {
+                        val repl = "Failed to process the message"
+                        println(repl)
+                        send(Frame.Text(repl))
                     }
                 }
             } catch (e: Exception) {
@@ -64,60 +148,29 @@ fun Application.module(testing: Boolean = false) {
                 connections -= thisConnection
             }
         }
-// ws://localhost:8080/admin
-        webSocket("/admin") {
-            send(Frame.Text("Hi from server2"))
-            while (true) {
-                val frame = incoming.receive()
-                if (frame is Frame.Text) {
-                    val msg = frame.readText()
-                    try {
-                        val module = SerializersModule {
-                            polymorphic(WSMessage::class) {
-                                subclass(ReceivedAdminCreateMessage::class)
-                                subclass(ReceivedAdminJoinMessage::class)
-                                subclass(ReceivedAdminAddQstMessage::class)
-                                subclass(ReceivedAdminStartRoundMessage::class)
-                                default { ReceivedAdminBasicMessage.serializer() }
-                            }
-                        }
 
-//                    val module = SerializersModule {
-//                        polymorphic(SentAdminMessage::class) {
-//                            subclass(SentAdminCreateMessage::class)
-//                            subclass(SentAdminJoinMessage::class)
-//                            subclass(SentAdminAddQstMessage::class)
-//                            subclass(SentAdminStartMessage::class)
-//                            subclass(SentAdminPlayerConnectedMessage::class)
-//                            subclass(SentAdminGetAnswersMessage::class)
-//                            default { SentAdminBasicMessage.serializer() }
-//                        }
-//                    }
 
-                        val format = Json { serializersModule = module }
-                        val message = format.decodeFromString<WSMessage>(msg)
-                        println(message)
-//                        when(message) {
-//                            is ReceivedAdminCreateMessage -> {
-//                                try {
-//                                    val unit = gameStore.createGame()
-//                                }
-//                                catch (e: Exception) {
-//                                    println("HUY a ne igra")
-//                                }
-//                                send("unit") // тут отправишь
-//                            }
-//                        }
-
-                    } catch (e: IllegalArgumentException) {
-                        val repl = "Failed to process the message"
-                        println(repl)
-                        send(Frame.Text(repl))
-                    }
-
-                }
-            }
-        }
+//        try {
+//            val module = SerializersModule {
+//                polymorphic(WSMessage::class) {
+//                    subclass(ReceivedAdminCreateMessage::class)
+//                    subclass(ReceivedAdminJoinMessage::class)
+//                    subclass(ReceivedAdminAddQstMessage::class)
+//                    subclass(ReceivedAdminStartRoundMessage::class)
+//                    default { ReceivedAdminBasicMessage.serializer() }
+//                }
+//            }
+//
+//            val format = Json { serializersModule = module }
+//            val message = format.decodeFromString<WSMessage>(msg)
+//            println("$thisConnection: $message")
+//
+//        } catch (e: IllegalArgumentException) {
+//            val repl = "Failed to process the message"
+//            println(repl)
+//            send(Frame.Text(repl))
+//        }
+//
 
 
         get("/json/gson") {
@@ -130,3 +183,6 @@ fun processMessage(msg: String) {
     TODO("Not yet implemented")
 }
 
+class MyException(message: String?) : Exception(message) {
+
+}
