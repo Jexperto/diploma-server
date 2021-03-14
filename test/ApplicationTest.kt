@@ -1,5 +1,6 @@
 package com.diploma
 
+import com.diploma.service.Game
 import io.ktor.application.*
 import io.ktor.response.*
 import io.ktor.request.*
@@ -17,6 +18,17 @@ import io.ktor.server.testing.*
 
 class ApplicationTest {
     @Test
+    fun testGame() {
+        withTestApplication({ module(testing = true) }) {
+                val game = Game("test")
+                game.storage.createTeam("team")
+                game.storage.addToTeam("team","user")
+                println(game.storage.teams["team"].toString())
+                assertEquals(1,game.storage.teams.size,"Must be 1")
+
+        }
+    }
+
     fun testRoot() {
         withTestApplication({ module(testing = true) }) {
             handleRequest(HttpMethod.Get, "/").apply {

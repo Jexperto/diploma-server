@@ -1,52 +1,64 @@
 package com.diploma.service
 
-import com.diploma.model.Question
+import com.diploma.WSMessage
+import kotlin.concurrent.schedule
 import com.diploma.store.InMemoryStorage
+import java.util.Timer
 import kotlin.random.Random
 
 
 class Game(val uuid: String) {
     val storage = InMemoryStorage()
-    var state: GameState = GameState.WAITING
-    var code: String
-    init {
-        code = Random.nextInt().hashCode().toString()
-    }
+    private var state: GameState = GameState.WAITING
+    var code: String = Random.nextInt().hashCode().toString()
 
     constructor(uuid: String, adminUUID: String) : this(uuid) {
-        addAdmin(adminUUID)
+        storage.addAdmin(adminUUID)
     }
-    fun addAdmin(uuid: String){
-        storage.admins.add(uuid)
-    }
-    fun containsAdmin(uuid: String){
-        storage.admins.contains(uuid)
-    }
-    fun removeAdmin(uuid: String){}
 
-    fun addUser(uuid: String){}
-    fun removeUser(uuid: String){}
-
-    fun startRound(roundNumber: Int, timer: Int?){}
-
-    fun addToTeam(team_uuid: String, user_uuid:String){}
-
-    fun createTeam(){}
-    fun removeTeam(uuid: String){}
-
-    fun addQuestion(q: Question): Error {
-//        return qaStore.adminAddQuestion(q)
-        return Error()
+    fun startRound(roundNumber: Int, timer: Long?) {
+        when(roundNumber){
+            1 -> {state = GameState.ROUND1
+                Timer("SettingUp", false).schedule(timer?.times(1000) ?: 5000) {
+                    state = GameState.MID
+                }
+            }
+            2 -> {state = GameState.ROUND2}
+        }
     }
 
 
 
-    fun processMessage() {
+    fun processAdminMessage(message: WSMessage) {
         when(state) {
             GameState.WAITING -> {
 
             }
             GameState.ROUND1 -> {
+
+            }
+            GameState.ROUND2 -> {
+
+            }
+            GameState.MID->{
+
+            }
+        }
+    }
+
+
+    fun processUserMessage(message: WSMessage) {
+        when(state) {
+            GameState.WAITING -> {
+
+            }
+            GameState.ROUND1 -> {
+
+            }
+            GameState.ROUND2 -> {
+
+            }
+            GameState.MID->{
 
             }
         }

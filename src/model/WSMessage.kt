@@ -81,11 +81,85 @@ data class SentAdminStartMessage(val num: Int, val max_ans: Int) : SentAdminMess
 
 @Serializable
 @SerialName("pl_con")
-data class SentAdminPlayerConnectedMessage(val team_id: Int, val pl_id: Int) : SentAdminMessage()
+data class SentAdminPlayerConnectedMessage(val team_id: String, val pl_id: String) : SentAdminMessage()
 
 @Serializable
 @SerialName("ans")
-data class SentAdminGetAnswersMessage(val team_id: Int, val question: Int, val answers: List<String>) : SentAdminMessage()
+data class SentAdminGetAnswersMessage(val team_id: String, val question_id: String, val answers: List<String>) : SentAdminMessage()
+
+//---------------------------------------------------------------------------//
+
+
+@Serializable
+abstract class ReceivedUserMessage : WSMessage()
+
+@Serializable
+class ReceivedUserBasicMessage: ReceivedUserMessage()
+
+@Serializable
+@SerialName("join")
+data class ReceivedUserJoinMessage(val code: String) : ReceivedUserMessage()
+
+
+@Serializable
+@SerialName("get_t")
+class ReceivedUserGetTeamsMessage() : ReceivedUserMessage()
+
+@Serializable
+@SerialName("join_t")
+data class ReceivedUserJoinTeamMessage(val team_id: String) : ReceivedUserMessage()
+
+
+@Serializable
+@SerialName("wr_ans")
+data class ReceivedUserWrongAnswerMessage(val pl_id: String, val question_id: String,val string: String) : ReceivedUserMessage()
+
+@Serializable
+@SerialName("r_ans")
+data class ReceivedUserRightAnswerMessage(val pl_id: String, val question_id: String,val string: String) : ReceivedUserMessage()
+
+//---------------------------------------------------------------------------//
+
+
+@Serializable
+abstract class SentUserMessage : WSMessage()
+
+@Serializable
+class SentUserBasicMessage: SentUserMessage()
+
+@Serializable
+@SerialName("join")
+data class SentUserJoinMessage(val pl_id: String) : SentUserMessage()
+
+@Serializable
+@SerialName("get_t")
+data class SentUserGetTeamsMessage(val team_ids: List<String>) : SentUserMessage()
+
+
+@Serializable
+@SerialName("join_t")
+data class SentUserJoinTeamMessage(val team_id: String) : SentUserMessage()
+
+@Serializable
+@SerialName("wr_qst")
+data class SentUserWrongQstMessage(val question_id: List<String>,val string: List<String>) : SentUserMessage()
+
+
+@Serializable
+@SerialName("timer_elapsed")
+class SentUserTimerElapsedMessage() : SentUserMessage()
+
+
+@Serializable
+@SerialName("ans")
+data class SentUserGetAnswersMessage(val question: String, val question_id: String,val answers: List<Answer>) : SentUserMessage()
+
+
+
+//---------------------------------------------------------------------------//
+
+@Serializable
+data class Answer(val key: Int, val value: String)
 
 
 //return WSMessage( when () {

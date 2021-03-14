@@ -1,8 +1,6 @@
 package com.diploma
 
 import com.diploma.service.Game
-import com.diploma.store.InMemoryStorage
-import com.diploma.store.Storage
 import io.ktor.application.*
 import io.ktor.http.*
 import io.ktor.http.cio.websocket.*
@@ -11,14 +9,13 @@ import io.ktor.response.*
 import io.ktor.routing.*
 import io.ktor.websocket.*
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 import java.time.Duration
 import java.util.*
-import kotlin.collections.HashMap
-import kotlin.collections.LinkedHashMap
 import kotlin.collections.LinkedHashSet
 
 
@@ -36,7 +33,9 @@ fun Application.module(testing: Boolean = false) {
 
     // val gameStore = GameInMemoryStore()
 
+
     routing {
+
         get("/") {
             call.respondText("HELLO WORLD!", contentType = ContentType.Text.Plain)
         }
@@ -46,42 +45,25 @@ fun Application.module(testing: Boolean = false) {
             resources("static")
         }
 
-        val connections = Collections.synchronizedSet<Connection?>(LinkedHashSet())
-        val games = Collections.synchronizedSet<Game?>(LinkedHashSet())
-        webSocket("/user") {
-            println("Adding user!")
-            val thisConnection = Connection(this, null)
-            connections += thisConnection
-            try {
-                send("You are connected! There are ${connections.count()} users here.")
-                for (frame in incoming) {
-                    frame as? Frame.Text ?: continue
-                    val receivedText = frame.readText()
-                    //val textWithUsername = "[${thisConnection.name}]: $receivedText"
-//                    connections.forEach {
-//                        it.session.send(textWithUsername)
-//                    }
-                }
-            } catch (e: Exception) {
-                println(e.localizedMessage)
-            } finally {
-                println("Removing $thisConnection!")
-                connections -= thisConnection
-            }
-        }
 
-        val module = SerializersModule {
+        val adminModule = SerializersModule {
             polymorphic(WSMessage::class) {
                 subclass(ReceivedAdminCreateMessage::class)
-                subclass(ReceivedAdminJoinMessage::class)
-                subclass(ReceivedAdminAddQstMessage::class)
-                subclass(ReceivedAdminStartRoundMessage::class)
                 default { ReceivedAdminBasicMessage.serializer() }
             }
         }
-// ws://localhost:8080/admin
-        webSocket("/admin") {
-            println("Adding user!")
+
+        val userModule = SerializersModule {
+            polymorphic(WSMessage::class) {
+                subclass(ReceivedUserJoinMessage::class)
+                default { ReceivedUserBasicMessage.serializer() }
+            }
+        }
+
+
+        val connections = Collections.synchronizedSet<Connection?>(LinkedHashSet())
+        val games = Collections.synchronizedSet<Game?>(LinkedHashSet())
+        webSocket("/user") {
             val thisConnection = Connection(this, null)
             connections += thisConnection
             try {
@@ -91,50 +73,103 @@ fun Application.module(testing: Boolean = false) {
                     val msg = frame.readText()
                     try {
 
-                        val format = Json { serializersModule = module }
+                        val format = Json { serializersModule = userModule }
                         val message = format.decodeFromString<WSMessage>(msg)
-                        // println("${thisConnection.session}: $message")
-                        if (message is ReceivedAdminCreateMessage) {
+                        if (message is ReceivedUserJoinMessage) {
                             if (thisConnection.uuid != null) {
                                 throw MyException("You already have an active session")
                             }
-                            thisConnection.uuid = UUID.randomUUID()
+                            thisConnection.uuid = UUID.randomUUID().toString()
                                 .also {
-                                    val game = Game(UUID.randomUUID().toString(), it.toString())
-                                    val reply = """{
-                                        "type": "create",
-                                        "code": "${game.code}",
-                                        "admin_id": "${it.toString()}"
-                                        }""".trimIndent()
-                                    send(Frame.Text(reply))
-                                    games.add(game)
-
+                                    if (joinGame(games, message.code, thisConnection.uuid.toString()) < 0) {
+                                        throw MyException("Couldn't join user to a game")
+                                    }
+                                    send(Json.encodeToString(SentUserJoinMessage(it)))
                                 }
-                                .also { println(it.toString()) }
+                                .also { println(it) }
 
                         } else {
 
                             if (thisConnection.uuid == null) {
                                 throw MyException("You don't have any active sessions")
                             }
-                                when (message) {
-                                    is ReceivedAdminAddQstMessage -> {
-                                    }
-                                    is ReceivedAdminJoinMessage -> {
-                                    }
-                                    is ReceivedAdminStartRoundMessage -> {
-                                    }
-                                    else -> {
-                                        println("Removing $thisConnection!")
-                                        connections -= thisConnection
-                                    }
-                                }
+                            //TODO: compartmentalize users by games
+                            games.find { it.storage.users.contains(thisConnection.uuid) }?.processUserMessage(message)
+                                ?: throw ConnectionException("Game not found. Closing connection")
 
                             println(thisConnection.uuid.toString())
                         }
 
                     } catch (e: MyException) {
                         println(e.message)
+                    } catch (e: ConnectionException) {
+                        println(e.message)
+                        connections -= thisConnection
+                    } catch (e: IllegalArgumentException) {
+                        val repl = "Failed to process the message"
+                        println(repl)
+                        send(Frame.Text(repl))
+                    }
+                }
+            } catch (e: Exception) {
+                println(e.localizedMessage)
+            } finally {
+                println("Removing $thisConnection!")
+                connections -= thisConnection
+            }
+        }
+
+
+// ws://localhost:8080/admin
+        webSocket("/admin") {
+            val thisConnection = Connection(this, null)
+            connections += thisConnection
+            try {
+                send("You are connected! There are ${connections.count()} users here.")
+                for (frame in incoming) {
+                    frame as? Frame.Text ?: continue
+                    val msg = frame.readText()
+                    try {
+
+                        val format = Json { serializersModule = adminModule }
+                        val message = format.decodeFromString<WSMessage>(msg)
+                        if (message is ReceivedAdminCreateMessage) {
+                            if (thisConnection.uuid != null) {
+                                throw MyException("You already have an active session")
+                            }
+                            thisConnection.uuid = UUID.randomUUID().toString()
+                                .also {
+                                    val game = Game(UUID.randomUUID().toString(), it)
+                                    val reply = """{
+                                        "type": "create",
+                                        "code": "${game.code}",
+                                        "admin_id": "$it"
+                                        }""".trimIndent()
+                                    println("CODE: ${game.code}")
+                                    send(Frame.Text(reply))
+                                    games.add(game)
+
+                                }
+                                .also {
+                                    println("admin_id: $it") }
+
+                        } else {
+
+                            if (thisConnection.uuid == null) {
+                                throw MyException("You don't have any active sessions")
+                            }
+                            //TODO: compartmentalize admins by games
+                            games.find { it.storage.admins.contains(thisConnection.uuid) }?.processAdminMessage(message)
+                                ?: throw ConnectionException("Game not found. Closing connection")
+
+                            println(thisConnection.uuid.toString())
+                        }
+
+                    } catch (e: MyException) {
+                        println(e.message)
+                    } catch (e: ConnectionException) {
+                        println(e.message)
+                        connections -= thisConnection
                     } catch (e: IllegalArgumentException) {
                         val repl = "Failed to process the message"
                         println(repl)
@@ -179,10 +214,14 @@ fun Application.module(testing: Boolean = false) {
     }
 }
 
+fun joinGame(games: Set<Game>, code: String, uuid: String): Int {
+    games.find { it.code == code }?.storage?.addUser(uuid) ?: return -1
+    return 0
+}
+
 fun processMessage(msg: String) {
     TODO("Not yet implemented")
 }
 
-class MyException(message: String?) : Exception(message) {
-
-}
+class MyException(message: String?) : Exception(message) {}
+class ConnectionException(message: String?) : Exception(message) {}
