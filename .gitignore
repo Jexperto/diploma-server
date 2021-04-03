@@ -104,6 +104,7 @@ fabric.properties
 ### Kotlin ###
 # Compiled class file
 *.class
+/build/*
 
 # Log file
 *.log
