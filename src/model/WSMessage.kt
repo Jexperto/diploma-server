@@ -29,17 +29,24 @@ enum class ErrorEvent(val event: String) : EventType {
 
 
 @Serializable
-abstract class WSMessage
+sealed class WSMessage
 
 @Serializable
-abstract class ReceivedAdminMessage : WSMessage()
+object WSErrorMessage : WSMessage()
 
 @Serializable
-class ReceivedAdminBasicMessage: ReceivedAdminMessage()
+sealed class ReceivedAdminMessage : WSMessage()
+
+@Serializable
+object ReceivedAdminBasicMessage : ReceivedAdminMessage()
 
 @Serializable
 @SerialName("create")
-class ReceivedAdminCreateMessage: ReceivedAdminMessage()
+object ReceivedAdminCreateMessage : ReceivedAdminMessage()
+
+@Serializable
+@SerialName("close")
+object ReceivedAdminCloseMessage : ReceivedAdminMessage()
 
 @Serializable
 @SerialName("join")
@@ -58,14 +65,18 @@ data class ReceivedAdminStartRoundMessage(val num: Int, val timer: Int) : Receiv
 
 
 @Serializable
-abstract class SentAdminMessage : WSMessage()
+sealed class SentAdminMessage : WSMessage()
 
 @Serializable
-class SentAdminBasicMessage: SentAdminMessage()
+object SentAdminBasicMessage : SentAdminMessage()
 
 @Serializable
 @SerialName("create")
 data class SentAdminCreateMessage(val code: String, val admin_id: String) : SentAdminMessage()
+
+@Serializable
+@SerialName("close")
+object SentAdminCloseMessage : SentAdminMessage()
 
 @Serializable
 @SerialName("join")
@@ -91,19 +102,19 @@ data class SentAdminGetAnswersMessage(val team_id: String, val question_id: Stri
 
 
 @Serializable
-abstract class ReceivedUserMessage : WSMessage()
+sealed class ReceivedUserMessage : WSMessage()
 
 @Serializable
-class ReceivedUserBasicMessage: ReceivedUserMessage()
+object ReceivedUserBasicMessage : ReceivedUserMessage()
 
 @Serializable
 @SerialName("join")
-data class ReceivedUserJoinMessage(val code: String) : ReceivedUserMessage()
+data class ReceivedUserJoinMessage(val nick: String, val code: String) : ReceivedUserMessage()
 
 
 @Serializable
 @SerialName("get_t")
-class ReceivedUserGetTeamsMessage() : ReceivedUserMessage()
+object ReceivedUserGetTeamsMessage : ReceivedUserMessage()
 
 @Serializable
 @SerialName("join_t")
@@ -122,10 +133,10 @@ data class ReceivedUserRightAnswerMessage(val pl_id: String, val question_id: St
 
 
 @Serializable
-abstract class SentUserMessage : WSMessage()
+sealed class SentUserMessage : WSMessage()
 
 @Serializable
-class SentUserBasicMessage: SentUserMessage()
+object SentUserBasicMessage : SentUserMessage()
 
 @Serializable
 @SerialName("join")
@@ -147,7 +158,7 @@ data class SentUserWrongQstMessage(val question_id: List<String>,val string: Lis
 
 @Serializable
 @SerialName("timer_elapsed")
-class SentUserTimerElapsedMessage() : SentUserMessage()
+object SentUserTimerElapsedMessage : SentUserMessage()
 
 
 @Serializable

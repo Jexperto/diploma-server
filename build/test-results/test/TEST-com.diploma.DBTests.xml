@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.diploma.DBTests" tests="8" skipped="0" failures="0" errors="0" timestamp="2021-04-03T02:11:11" hostname="JEXPERTO" time="0.037">
+  <properties/>
+  <testcase name="testAdmin" classname="com.diploma.DBTests" time="0.017"/>
+  <testcase name="testQuery" classname="com.diploma.DBTests" time="0.005"/>
+  <testcase name="testState" classname="com.diploma.DBTests" time="0.0"/>
+  <testcase name="testTeams" classname="com.diploma.DBTests" time="0.002"/>
+  <testcase name="testCode" classname="com.diploma.DBTests" time="0.001"/>
+  <testcase name="testUser" classname="com.diploma.DBTests" time="0.0"/>
+  <testcase name="testBD" classname="com.diploma.DBTests" time="0.002"/>
+  <testcase name="testQuestion" classname="com.diploma.DBTests" time="0.001"/>
+  <system-out><![CDATA[343fb4d1-acf8-403e-bcc8-d0cab746c8ba
+question_id ---- 6a624e9f-8377-4d8e-9abc-3a2dca678027
+answer ---- Answer
+valid ---- 1
+-----------------------
+question_id ---- 6a624e9f-8377-4d8e-9abc-3a2dca678027
+answer ---- wrong
+valid ---- 0
+-----------------------
+question_id ---- 6a624e9f-8377-4d8e-9abc-3a2dca678027
+answer ---- wrong2
+valid ---- 0
+-----------------------
+question_id ---- ba7c417a-794d-42e1-8e9b-d0c77160dfd3
+answer ---- Answer2
+valid ---- 1
+-----------------------
+question_id ---- ba7c417a-794d-42e1-8e9b-d0c77160dfd3
+answer ---- wrongqst2
+valid ---- 0
+-----------------------
+key: e568a216-e79b-457f-8cf8-3148e5bdeb5b -- value: Yankees
+key: ee18ef74-5940-4250-8ae3-1a5e9d4f2a43 -- value: Wolves
+key: a4183e63-f2cc-498f-80f5-11c14ded8cb3 -- value: Bears
+123
+
+-----------------------
+4742b27f-555e-4e16-aa59-7976a74b0ea8
+question2
+Answer2 -- true
+wrongqst2 -- false
+--------------
+24846792-5fe2-443b-9a38-d420441bcbef
+question
+Answer -- true
+wrong -- false
+wrong2 -- false
+--------------
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
