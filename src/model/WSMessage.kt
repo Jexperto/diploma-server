@@ -1,5 +1,6 @@
 package com.diploma
 
+import com.diploma.model.Answer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -29,10 +30,11 @@ enum class ErrorEvent(val event: String) : EventType {
 
 
 @Serializable
-sealed class WSMessage
+abstract class WSMessage
 
+@SerialName("error")
 @Serializable
-object WSErrorMessage : WSMessage()
+data class WSErrorMessage(var err_desc: String) : WSMessage()
 
 @Serializable
 sealed class ReceivedAdminMessage : WSMessage()
@@ -42,7 +44,7 @@ object ReceivedAdminBasicMessage : ReceivedAdminMessage()
 
 @Serializable
 @SerialName("create")
-object ReceivedAdminCreateMessage : ReceivedAdminMessage()
+data class ReceivedAdminCreateMessage(val nick: String) : ReceivedAdminMessage()
 
 @Serializable
 @SerialName("close")
@@ -127,7 +129,7 @@ data class ReceivedUserWrongAnswerMessage(val pl_id: String, val question_id: St
 
 @Serializable
 @SerialName("r_ans")
-data class ReceivedUserRightAnswerMessage(val pl_id: String, val question_id: String,val string: String) : ReceivedUserMessage()
+data class ReceivedUserRightAnswerMessage(val pl_id: String, val question_id: String,val answer_id: Int) : ReceivedUserMessage()
 
 //---------------------------------------------------------------------------//
 
@@ -163,14 +165,10 @@ object SentUserTimerElapsedMessage : SentUserMessage()
 
 @Serializable
 @SerialName("ans")
-data class SentUserGetAnswersMessage(val question: String, val question_id: String,val answers: List<Answer>) : SentUserMessage()
-
-
+data class SentUserGetAnswersMessage(val question: String, val question_id: String, val answers: List<Answer>) : SentUserMessage()
 
 //---------------------------------------------------------------------------//
 
-@Serializable
-data class Answer(val key: Int, val value: String)
 
 
 //return WSMessage( when () {

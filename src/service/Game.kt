@@ -3,12 +3,12 @@ package com.diploma.service
 import com.diploma.*
 import com.diploma.model.Answer
 import com.diploma.model.Question
-import kotlin.concurrent.schedule
 import com.diploma.store.Storage
-import io.ktor.http.cio.websocket.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.*
 import java.util.*
+import kotlin.collections.HashMap
 
 
 class Game(val storage: Storage, val connections: ConnectionManager) {
@@ -21,26 +21,44 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         }
     }
 
-    //  val storage: GameStorageInterface = GameStorageInterface(uuid, strg)
-    private val timer: Timer = Timer("GameTimer", false) //TODO: Use threadpool
-    private val stateListeners = mutableListOf<(String, GameState) -> Unit>()
+    private var gameToQuestions = Collections.synchronizedMap<String, HashMap<String,Question>>(LinkedHashMap())
 
+    //  val storage: GameStorageInterface = GameStorageInterface(uuid, strg)
+    private var stateListeners = hashSetOf<suspend (String, GameState) -> Unit>()
+
+    operator fun Storage.plusAssign(listener: suspend (String, GameState) -> Unit) {
+        stateListeners.add(listener);
+    }
+
+    operator fun Storage.minusAssign(listener: (String, GameState) -> Unit) {
+        stateListeners.remove(listener)
+    }
+
+    suspend fun Storage.setStateWithListener(gameUUID: String, state: GameState): Boolean {
+        if (!this.setState(gameUUID, state))
+            return false
+        for (listener in stateListeners) {
+            listener(gameUUID, state)
+        }
+        return true
+    }
 
     init {
         storage += { gameID, cur ->
             when (cur) {
                 GameState.ROUND1 -> {
-                    storage.shuffleQuestionsByTeams(gameID)
+                    println("ROUND1")
+                    //storage.shuffleQuestionsByTeams(gameID)
                 }
-                GameState.MID -> TODO()
-                GameState.ROUND2 -> TODO()
+                GameState.MID -> println("MID")
+                GameState.ROUND2 -> println("ROUND2")
             }
         }
     }
 
-
-    fun createGame(admin_uuid: String, code: String): String? {
+    private fun createGame(admin_uuid: String, admin_name: String, code: String): String? {
         val id = UUID.randomUUID().toString()
+        storage.addAdmin(admin_uuid, admin_name)
         if (storage.createGame(id, admin_uuid, code)) {
             storage.createTeam(id, "1", "1")
             storage.createTeam(id, "2", "2")
@@ -51,82 +69,161 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
     }
 
 
-    private fun startRound(game_uuid: String, roundNumber: Int, timer: Long?) {
+    private suspend fun startRound(gameUUID: String, roundNumber: Int, timerInSeconds: Long?) {
         when (roundNumber) {
             1 -> {
-                storage.setState(game_uuid, GameState.ROUND1)
-                this.timer.schedule(timer?.times(1000) ?: 5000) {
-                    storage.setState(game_uuid, GameState.MID)
+                storage.setStateWithListener(gameUUID, GameState.ROUND1)
+                val job = GlobalScope.launch {
+                    launch { playFirstRound(gameUUID) }
+                    launch {
+                        delay(timerInSeconds!! * 1000)
+                        storage.setStateWithListener(gameUUID, GameState.MID)
+                    }
                 }
             }
             2 -> {
-                storage.setState(game_uuid, GameState.ROUND2)
+                storage.setStateWithListener(gameUUID, GameState.ROUND2)
+                playSecondRound(gameUUID)
             }
+        }
+    }
+
+    private suspend fun playFirstRound(gameUUID: String) {
+        val map = distributeQuestions(gameUUID)
+        for (user in map) {
+            val questions = user.value
+            connections.sendToUser(
+                user.key,
+                Json.encodeToString(
+                    SentUserWrongQstMessage(
+                        listOf(questions.map { it.id }.toString()),
+                        listOf(questions.map { it.text }.toString())
+                    )
+                )
+            )
+
+        }
+
+    }
+
+    data class QuestionIDnText(val id: String, val text: String)
+
+    fun distributeQuestions(gameUUID: String): HashMap<String, MutableList<QuestionIDnText>> {
+        val playerToQuest = hashMapOf<String, MutableList<QuestionIDnText>>()
+
+        val questions = storage.getQuestions(gameUUID).shuffled()
+        val teams = storage.getTeamsWithPlayers(gameUUID)
+        val ids = teams.keys
+        val questPerTeam = questions.size / ids.size
+
+//            if(questions.await().size % ids.size != 0)
+//                throw IllegalArgumentException("It`s impossible to divide questions evenly")
+        val questIter = questions.listIterator()
+        val teamToQuest = hashMapOf<String, MutableList<String>>()
+
+        for (team in ids) {
+            val questionIds = mutableListOf<String>()
+            val players = teams[team]!!
+            var currentPlayerID = 0
+            for (j in 0 until questPerTeam) {
+                if (!questIter.hasNext())
+                    break
+                val q = questIter.next()
+                questionIds.add(q.id)
+                val currPlayer = players[currentPlayerID]
+                if (!playerToQuest.contains(currPlayer))
+                    playerToQuest[currPlayer] = mutableListOf()
+                val qList = playerToQuest[currPlayer]!!
+                qList.add(QuestionIDnText(q.id, q.text))
+                currentPlayerID++
+                if (currentPlayerID == players.size)
+                    currentPlayerID = 0;
+            }
+            teamToQuest[team] = questionIds
+        }
+        storage.addQuestionsToTeams(teamToQuest)
+
+        return playerToQuest
+    }
+
+
+    private fun playSecondRound(gameUUID: String) {
+        if (!gameToQuestions.containsKey(gameUUID))
+            storage.getQuestions(gameUUID).forEach { gameToQuestions[gameUUID]?.put(it.id,it)}
+        val adminUUID = storage.getAdmin(gameUUID)
+        val teams = storage.getTeamsWithPlayers(gameUUID)
+        val teamsWithQuestins = storage.getTeamsWithQuestions(gameUUID).toList()
+        GlobalScope.launch {
+            var questionIter = 0
+            var hasQuestions = true
+            while (hasQuestions) {
+                val teamCount = teamsWithQuestins.count()
+                teamsWithQuestins.forEachIndexed { index, pair ->
+                    if (index % 2 == 0) {
+                        if (index + 1 >= teamCount)
+                            return@forEachIndexed
+                        teams[pair.first]?.forEach { playerUUID ->
+                            val questionId = teamsWithQuestins[index + 1].second[questionIter]
+                            val question = gameToQuestions[gameUUID]!![questionId]
+                            connections.sendToUser(
+                                playerUUID, Json.encodeToString(
+                                    SentUserGetAnswersMessage(
+                                       question!!.text, questionId,question.answers)
+                                )
+                            )
+                            connections.sendToAdmin(
+                                adminUUID.toString(),
+                                Json.encodeToString(SentAdminGetAnswersMessage(pair.first, questionId, question.answers.map { it.text })),
+                                ConnectionManager.Type.ADMIN
+                            )
+                        }
+
+                    } else {
+                        (index >= teamCount)
+                        return@forEachIndexed
+
+                    }
+                }
+                questionIter++
+            }
+
+
         }
     }
 
 
     suspend fun processUserMessage(message: WSMessage, thisConnection: Connection): String? {
         when (message) {
-            is ReceivedUserJoinMessage -> {
-                if (thisConnection.uuid != null) {
-                    throw Exception("You already have an active session")
-                }
-                thisConnection.uuid = UUID.randomUUID().toString()
-                if (!joinGame(message.code, thisConnection.uuid.toString(), message.nick, null)) {
-                    throw Exception("Couldn't join user to a game")
-                }
-                val admin_uuid = storage.findGameByCode(message.code)?.let { storage.getAdmin(it) }
-                connections.add(
-                    thisConnection, ConnectionManager.Type.USER,
-                    admin_uuid
-                )
-                return (Json.encodeToString(SentUserJoinMessage(thisConnection.uuid!!) as SentUserMessage))
-
-            }
+            is ReceivedUserJoinMessage -> return handleUserJoinMessage(thisConnection, message)
 
             else -> {
                 if (thisConnection.uuid == null) {
                     throw Exception("You don't have any active sessions")
                 }
-                val game_uuid = com.diploma.storage.findGameByUser(thisConnection.uuid!!) ?: throw ConnectionException(
-                    "Game not found. Closing connection"
-                )
-                when (storage.getState(game_uuid)) {
+                val gameUuid =
+                    com.diploma.storage.findGameByUser(thisConnection.uuid!!) ?: throw ConnectionException(
+                        "Game not found. Closing connection"
+                    )
+                when (storage.getState(gameUuid)) {
                     GameState.WAITING -> when (message) {
 
-                        is ReceivedUserJoinTeamMessage -> {
-                            if (storage.addToTeam(game_uuid, message.team_id, thisConnection.uuid!!)) {
-
-                                val adminConnection =
-                                    connections.getConnectionByID(connections.getAdminID(thisConnection.uuid!!)!!)
-                                adminConnection?.session?.send(
-                                    Frame.Text(Json.encodeToString(
-                                        SentAdminPlayerConnectedMessage(
-                                            message.team_id,
-                                            thisConnection.uuid!!
-                                        ) as SentAdminMessage
-                                    ).also { println("Reply: $it") })
-                                )
-
-
-                                return Json.encodeToString(SentUserJoinTeamMessage(message.team_id) as SentUserMessage)
-                            }
-                            return null
-                        }
-
+                        is ReceivedUserJoinTeamMessage -> return handleUserJoinTeamMessage(
+                            gameUuid,
+                            thisConnection,
+                            message
+                        )
                         is ReceivedUserGetTeamsMessage -> return Json.encodeToString(
-                            storage.getTeams(game_uuid)?.values.toList()?.let {
+                            storage.getTeams(gameUuid).values.toList().let {
                                 SentUserGetTeamsMessage(
                                     it
                                 )
                             } as SentUserMessage)
                     }
-                    GameState.ROUND1 -> {
-
+                    GameState.ROUND1 -> when (message) {
+                        is ReceivedUserWrongAnswerMessage -> handleUserWrongAnswerMessage(message)
                     }
-                    GameState.ROUND2 -> {
-
+                    GameState.ROUND2 -> when (message) {
+                        is ReceivedUserRightAnswerMessage -> handleUserRightAnswerMessage(gameUuid, message)
                     }
                     GameState.MID -> {
 
@@ -140,75 +237,78 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         return null
     }
 
-    fun processAdminMessage(message: WSMessage, thisConnection: Connection): String? {
+    private fun handleUserRightAnswerMessage(gameUUID: String, message: ReceivedUserRightAnswerMessage) {
+        val q = gameToQuestions[gameUUID]!!.find { it?.id == message.question_id }
+        // if (message.)
+    }
+
+    private fun handleUserWrongAnswerMessage(message: ReceivedUserWrongAnswerMessage) {
+        //TODO: Check if user has a right to add an answer
+        storage.addWrongAnswer(message.question_id, message.string, message.pl_id)
+    }
+
+
+    private suspend fun handleUserJoinTeamMessage(
+        gameUUID: String,
+        thisConnection: Connection,
+        message: ReceivedUserJoinTeamMessage
+    ): String {
+        if (storage.addToTeam(gameUUID, message.team_id, thisConnection.uuid!!)) {
+
+            connections.sendToAdmin(
+                thisConnection.uuid!!, Json.encodeToString(
+                    SentAdminPlayerConnectedMessage(
+                        message.team_id,
+                        thisConnection.uuid!!
+                    ) as SentAdminMessage
+                ), ConnectionManager.Type.USER
+            )
+
+            return Json.encodeToString(SentUserJoinTeamMessage(message.team_id) as SentUserMessage)
+        }
+        throw Exception("Couldn't join a team")
+    }
+
+    private fun handleUserJoinMessage(thisConnection: Connection, message: ReceivedUserJoinMessage): String {
+        if (thisConnection.uuid != null) {
+            throw Exception("You already have an active session")
+        }
+        thisConnection.uuid = UUID.randomUUID().toString()
+        val gameID =
+            com.diploma.storage.findGameByCode(message.code) ?: throw Exception("Game code does not exist")
+        if (!joinGame(gameID, thisConnection.uuid.toString(), message.nick, null)) {
+            throw Exception("Couldn't join user to a game")
+        }
+        val adminUuid = gameID.let { storage.getAdmin(it) }
+        connections.add(
+            thisConnection, ConnectionManager.Type.USER,
+            adminUuid
+        )
+        return (Json.encodeToString(SentUserJoinMessage(thisConnection.uuid!!) as SentUserMessage))
+
+    }
+
+
+    suspend fun processAdminMessage(message: WSMessage, thisConnection: Connection): String? {
         when (message) {
-
-
-            is ReceivedAdminCreateMessage -> {
-                if (thisConnection.uuid != null) {
-                    throw Exception("You already have an active session")
-                }
-                thisConnection.uuid = UUID.randomUUID().toString()
-                connections.add(thisConnection, ConnectionManager.Type.ADMIN)
-                val gameID =
-                    createGame(thisConnection.uuid!!, getRandomString(6)) ?: throw Exception("Couldn't create a game")
-                val reply =
-                    Json.encodeToString(storage.getGameCode(gameID).also { println("CODE: $it") }?.let { code ->
-                        SentAdminCreateMessage(
-                            code, thisConnection.uuid!!
-                        )
-                    } as SentAdminMessage)
-
-                println("admin_id: $thisConnection.uuid")
-                return reply
-            }
-
-
-            is ReceivedAdminJoinMessage -> {
-                if (thisConnection.uuid != null) {
-                    throw Exception("You already have an active session")
-                }
-                val game = com.diploma.storage.findGameByAdmin(message.admin_id)
-                    ?: throw ConnectionException("Game not found. Closing connection")
-                thisConnection.uuid = message.admin_id
-                connections.add(thisConnection, ConnectionManager.Type.ADMIN)
-                return Json.encodeToString(
-                    SentAdminJoinMessage(com.diploma.storage.getGameCode(game)!!)
-                            as SentAdminMessage
-                )
-            }
-
-
+            is ReceivedAdminCreateMessage -> return handleAdminCreateMessage(thisConnection, message)
+            is ReceivedAdminJoinMessage -> return handleAdminJoinMessage(thisConnection, message)
             else -> {
                 if (thisConnection.uuid == null) {
                     throw Exception("You don't have any active sessions")
                 }
-                val game_uuid = com.diploma.storage.findGameByAdmin(thisConnection.uuid!!) ?: throw ConnectionException(
-                    "Game not found. Closing connection"
-                )
-                when (storage.getState(game_uuid)) {
+                val gameUUID =
+                    com.diploma.storage.findGameByAdmin(thisConnection.uuid!!) ?: throw ConnectionException(
+                        "Game not found. Closing connection"
+                    )
+                when (storage.getState(gameUUID)) {
                     GameState.WAITING -> {
-                        when (message) {
-                            is ReceivedAdminAddQstMessage -> {
-                                println(message)
-                                val q = Question(message.question, mutableListOf(Answer(message.answer, true)))
-                                val id = storage.addQuestion(
-                                    game_uuid,
-                                    q.id, q.answers!!.first().text, q.text
-                                ) ?: return null
-                                return Json.encodeToString(SentAdminAddQstMessage(id.toString()) as SentAdminMessage)
-                            }
-                            is ReceivedAdminStartRoundMessage -> {
-                                startRound(game_uuid, message.num, message.timer.toLong())
-                                return Json.encodeToString(SentAdminStartMessage(message.num, 20) as SentAdminMessage)
-                            }
-                            is ReceivedAdminCloseMessage -> {
-                                storage.removeGame(game_uuid)
-                                return Json.encodeToString(SentAdminCloseMessage as SentAdminMessage)
-                            }
-                            else -> return null
+                        return when (message) {
+                            is ReceivedAdminAddQstMessage -> handleAdminAddQuestionMessage(gameUUID, message)
+                            is ReceivedAdminStartRoundMessage -> handleAdminStartRoundMessage(gameUUID, message)
+                            is ReceivedAdminCloseMessage -> handleAdminCloseMessage(gameUUID, message)
+                            else -> null
                         }
-
 
                     }
                     GameState.ROUND1 -> {
@@ -218,7 +318,10 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
 
                     }
                     GameState.MID -> {
-
+                        return when (message) {
+                            is ReceivedAdminStartRoundMessage -> handleAdminStartRoundMessage(gameUUID, message)
+                            else -> null
+                        }
                     }
                 }
 
@@ -231,94 +334,70 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
     }
 
 
-//    inner class GameStorageInterface(val uuid: String, private val strg: Storage) {
-//        fun createGame(): Boolean {
-//            return strg.createGame(uuid)
-//        }
-//
-//        fun getGameCode(): String? {
-//            return strg.getGameCode(uuid)
-//        }
-//
-//
-//        fun saveEvent(message: WSMessage) {
-//            strg.saveEvent(uuid, message)
-//        }
-//
-//        fun getHistory(): List<WSMessage>? = strg.getHistory(uuid)
-//
-//        fun addAdmin(uuid: String): Boolean {
-//            return strg.addAdmin(this.uuid, uuid)
-//        }
-//
-//        fun getAdmin(): String? {
-//            return strg.getAdmin(uuid)
-//        }
-//
-//        fun removeAdmin(uuid: String): Boolean {
-//            return strg.removeAdmin(this.uuid, uuid)
-//        }
-//
-//        fun addUser(uuid: String): Boolean {
-//            return strg.addUser(this.uuid, uuid)
-//        }
-//
-//        fun removeUser(uuid: String): Boolean {
-//            return strg.removeUser(this.uuid, uuid)
-//        }
-//
-//        fun containsUser(uuid: String): Boolean {
-//            return strg.containsUser(this.uuid, uuid)
-//        }
-//
-//        fun addToTeam(team_uuid: String, user_uuid: String): Boolean {
-//
-//            return strg.addToTeam(uuid, team_uuid, user_uuid)
-//        }
-//
-//        fun createTeam(uuid: String): Boolean {
-//            return strg.createTeam(this.uuid, uuid)
-//        }
-//
-//        fun removeTeam(uuid: String): Boolean {
-//            return strg.removeTeam(this.uuid, uuid)
-//        }
-//
-//        fun addQuestion(q: Question): Int? {
-//            return strg.addQuestion(this.uuid, q)
-//        }
-//
-//        fun getTeams(): Set<String>? {
-//            return strg.getTeams(this.uuid)
-//
-//        }
-//
-//        fun containsTeam(game_uuid: String, uuid: String): Boolean {
-//            return strg.containsTeam(this.uuid, uuid)
-//        }
-//    }
+    private fun handleAdminJoinMessage(thisConnection: Connection, message: ReceivedAdminJoinMessage): String {
+        if (thisConnection.uuid != null) {
+            throw Exception("You already have an active session")
+        }
+        val game = com.diploma.storage.findGameByAdmin(message.admin_id)
+            ?: throw ConnectionException("Game not found. Closing connection")
+        thisConnection.uuid = message.admin_id
+        connections.add(thisConnection, ConnectionManager.Type.ADMIN)
+        return Json.encodeToString(
+            SentAdminJoinMessage(com.diploma.storage.getGameCode(game)!!)
+                    as SentAdminMessage
+        )
+    }
+
+    private fun handleAdminCreateMessage(
+        thisConnection: Connection,
+        message: ReceivedAdminCreateMessage
+    ): String {
+        if (thisConnection.uuid != null) {
+            throw Exception("You already have an active session")
+        }
+        thisConnection.uuid = UUID.randomUUID().toString()
+        connections.add(thisConnection, ConnectionManager.Type.ADMIN)
+        val gameID =
+            createGame(thisConnection.uuid!!, message.nick, getRandomString(6))
+                ?: throw Exception("Couldn't create a game")
+        val reply =
+            Json.encodeToString(storage.getGameCode(gameID).also { println("CODE: $it") }?.let { code ->
+                SentAdminCreateMessage(
+                    code, thisConnection.uuid!!
+                )
+            } as SentAdminMessage)
+
+        println("admin_id: $thisConnection.uuid")
+        return reply
+    }
+
+
+    private fun handleAdminAddQuestionMessage(gameUUID: String, message: ReceivedAdminAddQstMessage): String {
+        val q = Question(message.question, mutableListOf(Answer(message.answer, true)))
+        storage.addQuestion(
+            gameUUID,
+            q.id, q.answers.first().text, q.text
+        )
+        return Json.encodeToString(SentAdminAddQstMessage(q.id) as SentAdminMessage)
+    }
+
+    private suspend fun handleAdminStartRoundMessage(
+        gameUUID: String,
+        message: ReceivedAdminStartRoundMessage
+    ): String {
+        return Json.encodeToString(SentAdminStartMessage(message.num, 20) as SentAdminMessage)
+            .also { startRound(gameUUID, message.num, message.timer.toLong()) }
+    }
+
+    private fun handleAdminCloseMessage(gameUUID: String, message: ReceivedAdminCloseMessage): String {
+        storage.removeGame(gameUUID)
+        return Json.encodeToString(SentAdminCloseMessage as SentAdminMessage)
+    }
+
+    fun joinGame(gameID: String, player_uuid: String, name: String, team_uuid: String?): Boolean {
+        com.diploma.storage.addUser(gameID, player_uuid, name, team_uuid)
+        return true
+    }
 
 
 }
-//ReceivedAdminBasicMessage -> TODO()
-//
-
-
-//ReceivedUserBasicMessage -> TODO()
-//is ReceivedUserJoinMessage -> TODO()
-//is ReceivedUserRightAnswerMessage -> TODO()
-//is ReceivedUserWrongAnswerMessage -> TODO()
-//is SentAdminAddQstMessage -> TODO()
-//SentAdminBasicMessage -> TODO()
-//is SentAdminCreateMessage -> TODO()
-//is SentAdminGetAnswersMessage -> TODO()
-//is SentAdminJoinMessage -> TODO()
-//is SentAdminPlayerConnectedMessage -> TODO()
-//is SentAdminStartMessage -> TODO()
-//SentUserBasicMessage -> TODO()
-//is SentUserGetAnswersMessage -> TODO()
-//is SentUserGetTeamsMessage -> TODO()
-//is SentUserJoinMessage -> TODO()
-//is SentUserJoinTeamMessage -> TODO()
-//SentUserTimerElapsedMessage -> TODO()
-//is SentUserWrongQstMessage -> TODO()

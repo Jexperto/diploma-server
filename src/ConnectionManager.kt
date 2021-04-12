@@ -1,16 +1,19 @@
 package com.diploma
 
-class ConnectionManager { //TODO: clear data upon game closure
-    enum class Type{
-        ADMIN,
-         USER,
-    }
-    private val adminToUserMap = hashMapOf<String,MutableList<String>>()
-    private val userToAdmin = hashMapOf<String,String>()
-    private val idToConnection = hashMapOf<String,Connection>()
+import io.ktor.http.cio.websocket.*
 
-    fun add(thisConnection: Connection, type:Type, optUUID: String? = null) {
-        when(type){
+class ConnectionManager { //TODO: clear data upon game closure
+    enum class Type {
+        ADMIN,
+        USER,
+    }
+
+    private val adminToUserMap = hashMapOf<String, MutableList<String>>()
+    private val userToAdmin = hashMapOf<String, String>()
+    private val idToConnection = hashMapOf<String, Connection>()
+
+    fun add(thisConnection: Connection, type: Type, optUUID: String? = null) {
+        when (type) {
             Type.ADMIN -> {
                 if (!adminToUserMap.contains(thisConnection.uuid))
                     adminToUserMap[thisConnection.uuid!!] = mutableListOf()
@@ -23,18 +26,39 @@ class ConnectionManager { //TODO: clear data upon game closure
         }
         idToConnection[thisConnection.uuid!!] = thisConnection
     }
-    fun remove(thisConnection: Connection){
+
+    fun remove(thisConnection: Connection) {
         idToConnection.remove(thisConnection.uuid)
     }
 
-    fun getUsersIDS(adminID:String):List<String>?{
+    fun getUsersIDS(adminID: String): List<String>? {
         return adminToUserMap[adminID]
     }
-    fun getAdminID(userID:String): String? {
+
+    suspend fun sendAllUsers(adminUUID: String, message: String) {
+        adminToUserMap[adminUUID]?.forEach {
+            idToConnection[it]!!.session.send(Frame.Text(message))
+        } ?: throw Exception("No such admin")
+    }
+
+    suspend fun sendToUser(uuid: String, message: String) {
+            idToConnection[uuid]!!.session.send(Frame.Text(message))
+    }
+
+
+    suspend fun sendToAdmin(uuid: String, message: String, type: Type) {
+        when (type) {
+            Type.ADMIN -> idToConnection[uuid]!!.session.send(Frame.Text(message))
+            Type.USER -> idToConnection[userToAdmin[uuid]]!!.session.send(Frame.Text(message))
+        }
+
+    }
+
+    fun getAdminID(userID: String): String? {
         return userToAdmin[userID]
     }
 
-    fun getConnectionByID(uuid: String):Connection?{
+    fun getConnectionByID(uuid: String): Connection? {
         return idToConnection[uuid]
     }
 
@@ -45,4 +69,6 @@ class ConnectionManager { //TODO: clear data upon game closure
     operator fun minusAssign(thisConnection: Connection) {
         remove(thisConnection)
     }
+
+
 }

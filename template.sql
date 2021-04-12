@@ -71,10 +71,24 @@ CREATE TABLE IF NOT EXISTS TeamsToQuestions
 (
     team_id     TEXT not null,
     question_id TEXT not null,
-    result      BOOLEAN,
     primary key (team_id, question_id),
     foreign key (team_id)
         references Teams (id)
+        on delete cascade,
+    foreign key (question_id)
+        references Questions (id)
+        on delete cascade
+
+);
+
+CREATE TABLE IF NOT EXISTS PlayersToQuestionsResults
+(
+    player_id     TEXT not null,
+    question_id TEXT not null,
+    result      BOOLEAN,
+    primary key (player_id, question_id),
+    foreign key (player_id)
+        references Players (id)
         on delete cascade,
     foreign key (question_id)
         references Questions (id)
@@ -98,6 +112,12 @@ select id, question
 from Questions
 where room_id == :1
 
+
+select Players.id, Players.team_id from Players, Teams where room_id == ? and Players.team_id == Teams.id;
+
+select team_id,question_id from TeamsToQuestions, Teams where TeamsToQuestions.team_id == Teams.id and Teams.room_id == ?;
+
+select id,question from Questions where room_id == :1
 
 select room_id from Teams inner join (select (team_id) from Players where id == ?);
 

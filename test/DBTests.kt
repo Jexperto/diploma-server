@@ -2,6 +2,7 @@ package com.diploma
 
 import com.diploma.model.Answer
 import com.diploma.model.Question
+import com.diploma.service.Game
 import com.diploma.service.GameState
 import com.diploma.store.InMemoryBD
 import kotlin.test.*
@@ -32,17 +33,17 @@ class DBTests {
         val team2 = UUID.randomUUID().toString()
         var succ = bd.addAdmin(admin, "Kek")
         succ = bd.createGame(game, admin, code)
-        succ = bd.createTeam(game,team1,"Team1")
-        succ = bd.createTeam(game,team2,"Team2")
-        succ = bd.addUser(game,player2,"Player2",team2)
-        succ = bd.addUser(game,player1,"Player1",team1)
+        succ = bd.createTeam(game, team1, "Team1")
+        succ = bd.createTeam(game, team2, "Team2")
+        succ = bd.addUser(game, player2, "Player2", team2)
+        succ = bd.addUser(game, player1, "Player1", team1)
         val question = Question("question", mutableListOf(Answer("Answer", true)))
         val question2 = Question("question2", mutableListOf(Answer("Answer2", true)))
         succ = bd.addQuestion(game, question.id, question.answers.first().text, question.text)
         succ = bd.addQuestion(game, question2.id, question2.answers.first().text, question2.text)
-        succ = bd.addWrongAnswer(question.id,"wrong",player1)
-        succ = bd.addWrongAnswer(question2.id,"wrongqst2",player1)
-        succ = bd.addWrongAnswer(question.id,"wrong2",player2)
+        succ = bd.addWrongAnswer(question.id, "wrong", player1)
+        succ = bd.addWrongAnswer(question2.id, "wrongqst2", player1)
+        succ = bd.addWrongAnswer(question.id, "wrong2", player2)
         bd.executeQuery("select question_id, answer, false as valid from Wrong_Answers, Questions where Questions.room_id = '$game' union select question_id, answer, true from Right_Answers, Questions where Questions.room_id = '$game';")
 //        bd.executeQuery("select Questions.id as question_id, question, answer, valid from Questions inner join  (\n" +
 //                "select id, right_answer as answer, true as valid from Questions where room_id == '$game'\n" +
@@ -110,19 +111,19 @@ class DBTests {
         val player2 = UUID.randomUUID().toString()
         var succ = bd.addAdmin(admin, "Kek")
         succ = bd.createGame(game, admin, code)
-        succ = bd.createTeam(game,team1,"Team1")
-        succ = bd.createTeam(game,team2,"Team2")
-        succ = bd.addUser(game,player2,"Player2",team2)
-        succ = bd.addUser(game,player1,"Player1",team1)
+        succ = bd.createTeam(game, team1, "Team1")
+        succ = bd.createTeam(game, team2, "Team2")
+        succ = bd.addUser(game, player2, "Player2", team2)
+        succ = bd.addUser(game, player1, "Player1", team1)
         val question = Question("question", mutableListOf(Answer("Answer", true)))
         val question2 = Question("question2", mutableListOf(Answer("Answer2", true)))
         succ = bd.addQuestion(game, question.id, question.answers.first().text, question.text)
         succ = bd.addQuestion(game, question2.id, question2.answers.first().text, question2.text)
-        succ = bd.addWrongAnswer(question.id,"wrong",player1)
-        succ = bd.addWrongAnswer(question2.id,"wrongqst2",player1)
-        succ = bd.addWrongAnswer(question.id,"wrong2",player2)
+        succ = bd.addWrongAnswer(question.id, "wrong", player1)
+        succ = bd.addWrongAnswer(question2.id, "wrongqst2", player1)
+        succ = bd.addWrongAnswer(question.id, "wrong2", player2)
         val qsts = bd.getQuestions(game)
-        qsts.forEach{ q ->
+        qsts.forEach { q ->
             println(q?.id)
             println(q?.text)
             q?.answers?.forEach { a ->
@@ -151,6 +152,46 @@ class DBTests {
         assertEquals(map[team1], "Yankees")
         assertEquals(map[team2], "Wolves")
         assertEquals(map[team3], "Bears")
+
+    }
+
+    @Test
+    fun testShuffle() {
+        val gameInstance = Game(bd, connections)
+        val code = "123"
+        val admin = UUID.randomUUID().toString()
+        val game = UUID.randomUUID().toString()
+        val team1PlayerList = List(4) { UUID.randomUUID().toString() }
+        val team2PlayerList = List(4) { UUID.randomUUID().toString() }
+        val team1 = UUID.randomUUID().toString().also { println(it) }
+        val team2 = UUID.randomUUID().toString().also { println(it) }
+        println("---------------")
+        var succ = bd.addAdmin(admin, "Kek")
+        succ = bd.createGame(game, admin, code)
+        succ = bd.createTeam(game, team1, "Team1")
+        succ = bd.createTeam(game, team2, "Team2")
+        team1PlayerList.forEachIndexed { index, s ->
+            succ = bd.addUser(game, s, "Player$index", team1)
+            println(s)
+        }
+        println("---------------")
+        team2PlayerList.forEachIndexed { index, s ->
+            succ = bd.addUser(game, s, "Player$index", team2)
+            println(s)
+        }
+        println("---------------")
+
+        for (i in 1..8) {
+            val question = Question("question$i", mutableListOf(Answer("Answer$i", true)))
+            succ = bd.addQuestion(game, question.id, question.answers.first().text, question.text)
+        }
+
+        println("---------------")
+        println("---------------")
+
+        gameInstance.distributeQuestions(game).forEach { println("${it.key} -- ${it.value}") }
+       // bd.executeQuery("select * from TeamsToQuestions;")
+
 
     }
 

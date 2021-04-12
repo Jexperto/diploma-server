@@ -1,7 +1,6 @@
 package com.diploma.store
 
 import com.diploma.WSMessage
-import com.diploma.game
 import com.diploma.model.Question
 import com.diploma.service.GameState
 import java.util.concurrent.ConcurrentHashMap
@@ -14,7 +13,7 @@ class InMemoryStorage : Storage {
     var games: ConcurrentHashMap<String, GameStorage> = ConcurrentHashMap()
     private var adminToGame: ConcurrentHashMap<String, String> = ConcurrentHashMap()
     private var codeToGame: ConcurrentHashMap<String, String> = ConcurrentHashMap()
-    private var stateListeners = hashSetOf<(String, GameState, GameState) -> Unit>()
+    private var stateListeners = hashSetOf<(String, GameState) -> Unit>()
 
     //private var adminGames: HashMap<String,GameStorage> = hashMapOf()
     class GameStorage() {
@@ -29,38 +28,38 @@ class InMemoryStorage : Storage {
     }
 
 
-    override fun createGame(game_uuid: String, admin_uuid: String, code: String): Boolean {
+    override fun createGame(gameUUID: String, admin_uuid: String, code: String): Boolean {
         val game = GameStorage()
-        games[game_uuid] = game
-        codeToGame[game.code] = game_uuid
+        games[gameUUID] = game
+        codeToGame[game.code] = gameUUID
         return true
     }
 
 
-    override fun removeGame(game_uuid: String): Boolean {
+    override fun removeGame(gameUUID: String): Boolean {
         //TODO: Synchronize 3 maps in a different way
-        games.remove(game_uuid)
-        adminToGame.values.remove(game_uuid)
-        codeToGame.values.remove(game_uuid)
+        games.remove(gameUUID)
+        adminToGame.values.remove(gameUUID)
+        codeToGame.values.remove(gameUUID)
         return true
     }
 
-    override fun setState(game_uuid: String, state: GameState): Boolean {
-        if (!games.contains(game_uuid))
+    override fun setState(gameUUID: String, state: GameState): Boolean {
+        if (!games.contains(gameUUID))
             return false
-        val prev = games[game_uuid]!!.state
-        games[game_uuid]!!.state = state
+        val prev = games[gameUUID]!!.state
+        games[gameUUID]!!.state = state
         for (listener in stateListeners) {
-            listener(game_uuid, prev, state)
+            listener(gameUUID, state)
         }
         return true
     }
 
-    override fun shuffleQuestionsByTeams(game_uuid: String) {
-        val game = games[game_uuid]
-        val teamCount = game?.teams?.count() ?: return
-        if (teamCount < 1) return
-        val k = game.questions?.count()?.div(teamCount) ?: return
+     fun shuffleQuestionsByTeams(gameUUID: String):Boolean {
+        val game = games[gameUUID]
+        val teamCount = game?.teams?.count() ?: return false
+        if (teamCount < 1) return false
+        val k = game.questions?.count()?.div(teamCount) ?: return false
         game.questions!!.shuffle()
         var i = 0
         for (team in game.teams) {
@@ -70,6 +69,7 @@ class InMemoryStorage : Storage {
             i++
         }
         game.questions = null
+        return true
     }
 
     override fun getUserTeam(player_id: String): String? {
@@ -80,31 +80,23 @@ class InMemoryStorage : Storage {
         TODO("Not yet implemented")
     }
 
-    override fun getState(game_uuid: String): GameState? {
-        return games[game_uuid]?.state
-    }
-
-    override fun plusAssign(listener: (String, GameState, GameState) -> Unit) {
-        stateListeners.add(listener);
-    }
-
-    override fun minusAssign(listener: (String, GameState, GameState) -> Unit) {
-        stateListeners.remove(listener)
+    override fun getState(gameUUID: String): GameState? {
+        return games[gameUUID]?.state
     }
 
 
 
-    override fun getGameCode(game_uuid: String): String? {
-        return games[game_uuid]?.code
+    override fun getGameCode(gameUUID: String): String? {
+        return games[gameUUID]?.code
     }
 
 
-    override fun saveEvent(game_uuid: String, message: WSMessage) {
-        games[game_uuid]?.events?.add(message)
+    override fun saveEvent(gameUUID: String, message: WSMessage) {
+        games[gameUUID]?.events?.add(message)
     }
 
-    override fun getHistory(game_uuid: String): List<WSMessage>? =
-        games[game_uuid]?.events?.toList()
+    override fun getHistory(gameUUID: String): List<WSMessage>? =
+        games[gameUUID]?.events?.toList()
 
 
     override fun addAdmin(admin_uuid: String, name: String): Boolean {
@@ -115,45 +107,45 @@ class InMemoryStorage : Storage {
         TODO("Not yet implemented")
     }
 
-//    override fun addAdmin(game_uuid: String, uuid: String): Boolean {
-//        val game = games[game_uuid] ?: return false
+//    override fun addAdmin(gameUUID: String, uuid: String): Boolean {
+//        val game = games[gameUUID] ?: return false
 //        if (game.admin != null)
 //            return false
 //        game.admin = uuid
-//        adminToGame[uuid] = game_uuid
+//        adminToGame[uuid] = gameUUID
 //        //  adminGames[uuid] = game
 //        return true
 //    }
 
-    override fun getAdmin(game_uuid: String): String? {
-        return games[game_uuid]?.admin
+    override fun getAdmin(gameUUID: String): String? {
+        return games[gameUUID]?.admin
     }
 
-    override fun removeAdmin(game_uuid: String, uuid: String): Boolean {
-        games[game_uuid]?.admin = null ?: return false
+    override fun removeAdmin(gameUUID: String, uuid: String): Boolean {
+        games[gameUUID]?.admin = null ?: return false
         return true
     }
 
-    override fun addUser(game_uuid: String, player_id: String, name: String, team_id: String?): Boolean {
+    override fun addUser(gameUUID: String, player_id: String, name: String, team_id: String?): Boolean {
         TODO("Not yet implemented")
     }
 
-//    override fun addUser(game_uuid: String, uuid: String): Boolean {
-//        games[game_uuid]?.users?.add(uuid) ?: return false
+//    override fun addUser(gameUUID: String, uuid: String): Boolean {
+//        games[gameUUID]?.users?.add(uuid) ?: return false
 //        return true
 //    }
 
-    override fun removeUser(game_uuid: String, uuid: String): Boolean {
-        games[game_uuid]?.users?.remove(uuid) ?: return false
+    override fun removeUser(gameUUID: String, uuid: String): Boolean {
+        games[gameUUID]?.users?.remove(uuid) ?: return false
         return true
     }
 
-    fun containsUser(game_uuid: String, uuid: String): Boolean {
-        return games[game_uuid]?.users?.contains(uuid) ?: return false
+    fun containsUser(gameUUID: String, uuid: String): Boolean {
+        return games[gameUUID]?.users?.contains(uuid) ?: return false
     }
 
-    override fun addToTeam(game_uuid: String, team_uuid: String, user_uuid: String): Boolean {
-        val game = games[game_uuid]
+    override fun addToTeam(gameUUID: String, team_uuid: String, user_uuid: String): Boolean {
+        val game = games[gameUUID]
         if (game?.teams?.containsKey(team_uuid) == true) {
             game.teams[team_uuid]?.add(user_uuid)
             return true
@@ -161,26 +153,34 @@ class InMemoryStorage : Storage {
         return false
     }
 
-    override fun createTeam(game_uuid: String, team_uuid: String, name: String): Boolean {
+    override fun createTeam(gameUUID: String, team_uuid: String, name: String): Boolean {
         TODO("Not yet implemented")
     }
 
-//    override fun createTeam(game_uuid: String, uuid: String): Boolean {
-//        games[game_uuid]?.teams?.set(uuid, hashSetOf())
+//    override fun createTeam(gameUUID: String, uuid: String): Boolean {
+//        games[gameUUID]?.teams?.set(uuid, hashSetOf())
 //        return true
 //    }
 
-    override fun removeTeam(game_uuid: String, uuid: String): Boolean {
-        games[game_uuid]?.teams?.remove(uuid)
+    override fun removeTeam(gameUUID: String, uuid: String): Boolean {
+        games[gameUUID]?.teams?.remove(uuid)
         return true
     }
 
-    override fun getQuestions(game_uuid: String): List<Question?> {
+    override fun getQuestions(gameUUID: String): List<Question> {
 
         return emptyList()
     }
 
-    override fun addQuestion(game_uuid: String, question_id: String, right_answer: String, question: String): Boolean {
+    override fun getQuestionIds(gameUUID: String): MutableList<String> {
+        TODO("Not yet implemented")
+    }
+
+    override fun getUsersToQuestions(gameUUID: String): HashMap<String, List<String>> {
+        TODO("Not yet implemented")
+    }
+
+    override fun addQuestion(gameUUID: String, question_id: String, right_answer: String, question: String): Boolean {
         TODO("Not yet implemented")
     }
 
@@ -188,24 +188,36 @@ class InMemoryStorage : Storage {
         TODO("Not yet implemented")
     }
 
-    override fun getTeams(game_uuid: String): HashMap<String, String> {
+    override fun addUserAnswerResult(question_id: String, player_id: String): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    override fun getTeamsWithPlayers(gameUUID: String): HashMap<String, MutableList<String>> {
+        TODO("Not yet implemented")
+    }
+
+    override fun getTeamIds(gameUUID: String): MutableList<String> {
+        TODO("Not yet implemented")
+    }
+
+    override fun getTeams(gameUUID: String): HashMap<String, String> {
         TODO("Not yet implemented")
     }
 
 
-//    override fun addQuestion(game_uuid: String, q: Question): Int? {
-//        val qst = games[game_uuid]?.questions
+//    override fun addQuestion(gameUUID: String, q: Question): Int? {
+//        val qst = games[gameUUID]?.questions
 //        qst?.add(q) ?: return null
 //        return (qst.size.minus(1))
 //    }
 
-//    override fun getTeams(game_uuid: String): HashMap<String,String> {
-//        return games[game_uuid]?.teams ?: return null
+//    override fun getTeams(gameUUID: String): HashMap<String,String> {
+//        return games[gameUUID]?.teams ?: return null
 //
 //    }
 
-    fun containsTeam(game_uuid: String, uuid: String): Boolean {
-        return games[game_uuid]?.teams?.containsKey(uuid) ?: return false
+    fun containsTeam(gameUUID: String, uuid: String): Boolean {
+        return games[gameUUID]?.teams?.containsKey(uuid) ?: return false
     }
 
     override fun findGameByAdmin(admin_uuid: String): String? {
@@ -224,6 +236,10 @@ class InMemoryStorage : Storage {
             }
         }
         return null
+    }
+
+    override fun addQuestionsToTeams(teamsToQuestions: HashMap<String, MutableList<String>>): Boolean {
+        TODO("Not yet implemented")
     }
 
 

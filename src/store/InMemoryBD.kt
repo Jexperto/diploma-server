@@ -1,13 +1,10 @@
 package com.diploma.store
 
 import com.diploma.WSMessage
-import com.diploma.game
 import com.diploma.model.Answer
 import com.diploma.model.Question
-import com.diploma.service.Game
 import com.diploma.service.GameState
 import java.sql.DriverManager
-import java.sql.PreparedStatement
 import java.sql.Statement
 import java.sql.ResultSet
 
@@ -16,7 +13,7 @@ private val CONNECTION_URL = "jdbc:sqlite::memory:";
 
 class InMemoryBD : Storage {
     private var con = DriverManager.getConnection(CONNECTION_URL)
-    private var stateListeners = hashSetOf<(String, GameState) -> Unit>()
+
 
     init {
         initBD()
@@ -105,11 +102,26 @@ class InMemoryBD : Storage {
         )
 
         statement.addBatch(
+            "CREATE TABLE IF NOT EXISTS PlayersToQuestionsResults\n" +
+                    "(\n" +
+                    "    player_id     TEXT not null,\n" +
+                    "    question_id TEXT not null,\n" +
+                    "    result      BOOLEAN,\n" +
+                    "    primary key (player_id, question_id),\n" +
+                    "    foreign key (player_id)\n" +
+                    "        references Players (id)\n" +
+                    "        on delete cascade,\n" +
+                    "    foreign key (question_id)\n" +
+                    "        references Questions (id)\n" +
+                    "        on delete cascade\n" +
+                    ");"
+        )
+
+        statement.addBatch(
             "CREATE TABLE IF NOT EXISTS TeamsToQuestions\n" +
                     "(\n" +
                     "    team_id     TEXT not null,\n" +
                     "    question_id TEXT not null,\n" +
-                    "    result BOOLEAN,\n" +
                     "    primary key (team_id, question_id),\n" +
                     "    foreign key (team_id)\n" +
                     "        references Teams (id)\n" +
@@ -117,7 +129,6 @@ class InMemoryBD : Storage {
                     "    foreign key (question_id)\n" +
                     "        references Questions (id)\n" +
                     "        on delete cascade\n" +
-                    "\n" +
                     ");"
         )
 
@@ -131,7 +142,7 @@ class InMemoryBD : Storage {
         val colCount = rs.metaData.columnCount
         while (rs.next()) {
             for (i in 1..colCount) {
-                rs.getObject(i).also { println("${rs.metaData.getColumnLabel(i)} ---- $it") }
+                val obj = rs.getObject(i).also { println("${rs.metaData.getColumnLabel(i)} ---- $it") }
             }
             println("-----------------------")
         }
@@ -144,15 +155,12 @@ class InMemoryBD : Storage {
         stmt.close()
     }
 
-    override fun setState(game_uuid: String, state: GameState): Boolean {
+    override fun setState(gameUUID: String, state: GameState): Boolean {
         return try {
             val stmt = con.prepareStatement("update Rooms set state = ? where id = ?")
             stmt.setInt(1, state.ordinal)
-            stmt.setString(2, game_uuid)
+            stmt.setString(2, gameUUID)
             stmt.executeUpdate()
-            for (listener in stateListeners) {
-                listener(game_uuid, state)
-            }
             stmt.close()
 
             true
@@ -161,10 +169,10 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun getState(game_uuid: String): GameState? {
+    override fun getState(gameUUID: String): GameState? {
         return try {
             val statement = con.prepareStatement("select state from Rooms where id=?")
-            statement.setString(1, game_uuid)
+            statement.setString(1, gameUUID)
             val res = statement.executeQuery().getInt(1)
             statement.close()
             GameState.values()[res]
@@ -172,20 +180,13 @@ class InMemoryBD : Storage {
             null
         }
     }
-    override fun plusAssign(listener: (String, GameState) -> Unit) {
-        stateListeners.add(listener);
-    }
-
-    override fun minusAssign(listener: (String, GameState) -> Unit) {
-        stateListeners.remove(listener)
-    }
 
 
-    override fun createGame(game_uuid: String, admin_uuid: String, code: String): Boolean {
+    override fun createGame(gameUUID: String, admin_uuid: String, code: String): Boolean {
         return try {
             val insertRoomSql = "insert into Rooms (id, admin_id, code,state) values (?,?,?,?)"
             val statement = con.prepareStatement(insertRoomSql)
-            statement.setString(1, game_uuid)
+            statement.setString(1, gameUUID)
             statement.setString(2, admin_uuid)
             statement.setString(3, code)
             statement.setInt(4, GameState.WAITING.ordinal)
@@ -197,10 +198,10 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun removeGame(game_uuid: String): Boolean {
+    override fun removeGame(gameUUID: String): Boolean {
         return try {
             val statement = con.prepareStatement("delete from Rooms where id=?")
-            statement.setString(1, game_uuid)
+            statement.setString(1, gameUUID)
             statement.execute()
             statement.close()
             true
@@ -209,10 +210,10 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun getGameCode(game_uuid: String): String? {
+    override fun getGameCode(gameUUID: String): String? {
         return try {
             val statement = con.prepareStatement("select code from Rooms where id=?")
-            statement.setString(1, game_uuid)
+            statement.setString(1, gameUUID)
             val res = statement.executeQuery().getString(1)
             statement.close()
             res
@@ -236,10 +237,10 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun getAdmin(game_uuid: String): String? {
+    override fun getAdmin(gameUUID: String): String? {
         return try {
             val stmt = con.prepareStatement(("select admin_id from Rooms where id=?"))
-            stmt.setString(1, game_uuid)
+            stmt.setString(1, gameUUID)
             val res = stmt.executeQuery().getString(1)
             stmt.close()
             res
@@ -261,15 +262,15 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun removeAdmin(game_uuid: String, admin_uuid: String): Boolean {
+    override fun removeAdmin(gameUUID: String, admin_uuid: String): Boolean {
         TODO("Not yet implemented")
     }
 
 
-    override fun createTeam(game_uuid: String, team_uuid: String, name: String): Boolean {
+    override fun createTeam(gameUUID: String, team_uuid: String, name: String): Boolean {
         return try {
             val stmt = con.prepareStatement("insert into Teams (room_id, id, name) values (?,?,?)")
-            stmt.setString(1, game_uuid)
+            stmt.setString(1, gameUUID)
             stmt.setString(2, team_uuid)
             stmt.setString(3, name)
             stmt.execute()
@@ -280,7 +281,7 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun removeTeam(game_uuid: String, team_uuid: String): Boolean {
+    override fun removeTeam(gameUUID: String, team_uuid: String): Boolean {
         return try {
             val stmt = con.prepareStatement("delete from Teams where id=?")
             stmt.setString(1, team_uuid)
@@ -292,7 +293,7 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun addToTeam(game_uuid: String, team_uuid: String, user_uuid: String): Boolean {
+    override fun addToTeam(gameUUID: String, team_uuid: String, user_uuid: String): Boolean {
         return try {
             val stmt = con.prepareStatement("update Players set team_id = ? where id = ?")
             stmt.setString(1, team_uuid)
@@ -305,7 +306,7 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun addUser(game_uuid: String, player_id: String, name: String, team_id: String?): Boolean {
+    override fun addUser(gameUUID: String, player_id: String, name: String, team_id: String?): Boolean {
         return try {
             val stmt = con.prepareStatement("insert into Players (id, team_id, name) values (?,?,?)")
             stmt.setString(1, player_id)
@@ -344,7 +345,7 @@ class InMemoryBD : Storage {
     }
 
 
-    override fun removeUser(game_uuid: String, uuid: String): Boolean {
+    override fun removeUser(gameUUID: String, uuid: String): Boolean {
         return try {
             val stmt = con.prepareStatement("delete from Players where id=?")
             stmt.setString(1, uuid)
@@ -357,11 +358,11 @@ class InMemoryBD : Storage {
     }
 
 
-    override fun getQuestions(game_uuid: String): List<Question?> {
+    override fun getQuestions(gameUUID: String): List<Question> {
         try {
 
             val stmt = con.prepareStatement("select id,question from Questions where room_id == :1")
-            stmt.setString(1, game_uuid)
+            stmt.setString(1, gameUUID)
             val qstRes = stmt.executeQuery()
             val map = hashMapOf<String, Question>()
             while (qstRes.next()) {
@@ -370,7 +371,7 @@ class InMemoryBD : Storage {
             }
             val statement =
                 con.prepareStatement("select question_id, answer, false as valid from Wrong_Answers, Questions where Questions.room_id = :1 union select question_id, answer, true from Right_Answers, Questions where Questions.room_id = :1;")
-            statement.setString(1, game_uuid)
+            statement.setString(1, gameUUID)
             val res = statement.executeQuery()
             while (res.next()) {
                 val qstId = res.getString(1)
@@ -382,20 +383,35 @@ class InMemoryBD : Storage {
             statement.close()
             return map.values.toList()
 
-
         } catch (e: Exception) {
             return listOf()
         }
     }
 
-    override fun addQuestion(game_uuid: String, question_id: String, right_answer: String, question: String): Boolean {
+    override fun getQuestionIds(gameUUID: String): MutableList<String> {
+        val questions = mutableListOf<String>()
+        val qststmt = con.prepareStatement("select id from Questions where room_id == ?;")
+        qststmt.setString(1, gameUUID)
+        var res = qststmt.executeQuery()
+        while (res.next())
+            questions += res.getString(1)
+        qststmt.close()
+        return questions
+    }
+
+    override fun getUsersToQuestions(gameUUID: String): HashMap<String, List<String>> {
+        TODO("Not yet implemented")
+    }
+
+
+    override fun addQuestion(gameUUID: String, question_id: String, right_answer: String, question: String): Boolean {
         return try {
             con.autoCommit = false
             val stmt1 = con.prepareStatement("insert into Right_Answers (question_id, answer) values (:1,:2)")
             val stmt =
                 con.prepareStatement("insert into Questions (id, room_id, question) values (:1,:2,:3); insert into Right_Answers (question_id, answer) values (:1,:4)")
             stmt.setString(1, question_id)
-            stmt.setString(2, game_uuid)
+            stmt.setString(2, gameUUID)
             stmt.setString(3, question)
             stmt1.setString(1, question_id)
             stmt1.setString(2, right_answer)
@@ -428,11 +444,45 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun getTeams(game_uuid: String): HashMap<String, String> {
+    override fun addUserAnswerResult(question_id: String, player_id: String): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    override fun getTeamsWithPlayers(gameUUID: String): HashMap<String, MutableList<String>> {
+        return try {
+            val map = hashMapOf<String, MutableList<String>>()
+            val stmt =
+                con.prepareStatement("select Players.id, Players.team_id from Players, Teams where room_id == ? and Players.team_id == Teams.id;")
+            stmt.setString(1, gameUUID)
+            val res = stmt.executeQuery()
+            while (res.next()) {
+                val playerID = res.getString(1)
+                val teamID = res.getString(2)
+                map[teamID]?.add(playerID) ?: map.put(teamID, mutableListOf(playerID))
+            }
+            stmt.close()
+            return map
+        } catch (e: Exception) {
+            hashMapOf()
+        }
+    }
+
+    override fun getTeamIds(gameUUID: String): MutableList<String> {
+        val teams = mutableListOf<String>()
+        val teamstmt = con.prepareStatement("select id from Teams where room_id = ?;")
+        teamstmt.setString(1, gameUUID)
+        val res = teamstmt.executeQuery()
+        while (res.next())
+            teams += res.getString(1)
+        teamstmt.close()
+        return teams
+    }
+
+    override fun getTeams(gameUUID: String): HashMap<String, String> {
         return try {
             val map = hashMapOf<String, String>()
             val stmt = con.prepareStatement("select id,name from Teams where room_id = ?;")
-            stmt.setString(1, game_uuid)
+            stmt.setString(1, gameUUID)
             val res = stmt.executeQuery()
             while (res.next())
                 map[res.getString(1)] = res.getString(2)
@@ -482,15 +532,51 @@ class InMemoryBD : Storage {
 
     }
 
-    override fun shuffleQuestionsByTeams(game_uuid: String) {
+
+    override fun getTeamsWithQuestions(gameUUID: String): HashMap<String, MutableList<String>> {
+        return try {
+            val res = hashMapOf<String, MutableList<String>>()
+            val stmt = con.prepareStatement("select team_id,question_id from TeamsToQuestions, Teams where TeamsToQuestions.team_id == Teams.id and Teams.room_id == ?;")
+            stmt.setString(1, gameUUID)
+            val rs = stmt.executeQuery()
+            while (rs.next()) {
+                val teamId = rs.getString(1)
+                val questionId = rs.getString(2)
+                if (!res.containsKey(teamId))
+                    res[teamId] = mutableListOf(questionId)
+                res[teamId]!!.add(questionId)
+            }
+            stmt.close()
+            res
+        } catch (e: Exception) {
+            hashMapOf()
+        }
+    }
+
+
+    override fun addQuestionsToTeams(teamsToQuestions: HashMap<String, MutableList<String>>): Boolean {
+        return try {
+            val stmt = con.prepareStatement("insert into TeamsToQuestions (team_id, question_id) values (?,?)")
+            teamsToQuestions.forEach {
+                for (q in it.value) {
+                    stmt.setString(1, it.key)
+                    stmt.setString(2, q)
+                    stmt.addBatch()
+                }
+            }
+            stmt.executeBatch()
+            stmt.close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    override fun saveEvent(gameUUID: String, message: WSMessage) {
         TODO("Not yet implemented")
     }
 
-    override fun saveEvent(game_uuid: String, message: WSMessage) {
-        TODO("Not yet implemented")
-    }
-
-    override fun getHistory(game_uuid: String): List<WSMessage>? {
+    override fun getHistory(gameUUID: String): List<WSMessage>? {
         TODO("Not yet implemented")
     }
 

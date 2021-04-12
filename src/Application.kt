@@ -1,6 +1,7 @@
 package com.diploma
 
 import com.diploma.service.Game
+import com.diploma.store.InMemoryBD
 import com.diploma.store.InMemoryStorage
 import com.diploma.store.Storage
 import io.ktor.application.*
@@ -11,12 +12,16 @@ import io.ktor.response.*
 import io.ktor.routing.*
 import io.ktor.websocket.*
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
+import kotlinx.serialization.modules.subclass
 import org.sqlite.JDBC
 import java.sql.DriverManager
 import java.time.Duration
 
-val storage: Storage = InMemoryStorage()
+val storage: Storage = InMemoryBD()
 val connections = ConnectionManager()
 val game = Game(storage, connections)
 fun main(args: Array<String>): Unit {
@@ -36,6 +41,12 @@ fun Application.module(testing: Boolean = false) {
 
     routing {
 
+        val errorSerializer = SerializersModule {
+            polymorphic(WSMessage::class) {
+                subclass(WSErrorMessage::class)
+            }
+        }
+
         get("/") {
             call.respondText("HELLO WORLD!", contentType = ContentType.Text.Plain)
         }
@@ -45,7 +56,7 @@ fun Application.module(testing: Boolean = false) {
             resources("static")
         }
 
-
+        //ws://localhost:8080/admin
         webSocket("/user") {
             val thisConnection = Connection(this, null)
             try {
@@ -93,12 +104,14 @@ fun Application.module(testing: Boolean = false) {
                         reply?.let { Frame.Text(it) }?.let { send(it) }
 
                     } catch (e: ConnectionException) {
-                        println(e.message).also { send(Frame.Text(it.toString())) }
+                        println(e.message)
+                        val repl = Json{serializersModule = errorSerializer}.encodeToString(WSErrorMessage(e.message.toString())as WSMessage)
+                        send(Frame.Text(repl))
                         game.connections -= thisConnection
                     } catch (e: IllegalArgumentException) {
                         val repl = "Failed to process the message"
                         println(repl)
-                        send(Frame.Text(repl))
+                        send(Frame.Text(Json{serializersModule = errorSerializer}.encodeToString(WSErrorMessage(repl) as WSMessage)))
                     }
 
                 }
@@ -118,10 +131,5 @@ fun Application.module(testing: Boolean = false) {
     }
 }
 
-fun joinGame(code: String, player_uuid: String, name: String, team_uuid: String?): Boolean {
-    val gameID = storage.findGameByCode(code) ?: return false
-    storage.addUser(gameID,player_uuid,name,team_uuid)
-    return true
-}
 
 class ConnectionException(message: String?) : Exception(message) {}
