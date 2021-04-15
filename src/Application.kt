@@ -2,7 +2,6 @@ package com.diploma
 
 import com.diploma.service.Game
 import com.diploma.store.InMemoryBD
-import com.diploma.store.InMemoryStorage
 import com.diploma.store.Storage
 import io.ktor.application.*
 import io.ktor.http.*
@@ -24,15 +23,15 @@ import java.time.Duration
 val storage: Storage = InMemoryBD()
 val connections = ConnectionManager()
 val game = Game(storage, connections)
-fun main(args: Array<String>): Unit {
+fun main(args: Array<String>) {
     DriverManager.registerDriver(JDBC())
     io.ktor.server.netty.EngineMain.main(args)
 }
 
 @Suppress("unused") // Referenced in application.conf
 @kotlin.jvm.JvmOverloads
-fun Application.module(testing: Boolean = false) {
-    install(io.ktor.websocket.WebSockets) {
+fun Application.server(testing: Boolean = false) {
+    install(WebSockets) {
         pingPeriod = Duration.ofSeconds(15)
         timeout = Duration.ofSeconds(15)
         maxFrameSize = Long.MAX_VALUE
@@ -41,10 +40,14 @@ fun Application.module(testing: Boolean = false) {
 
     routing {
 
+
         val errorSerializer = SerializersModule {
             polymorphic(WSMessage::class) {
                 subclass(WSErrorMessage::class)
             }
+        }
+        fun getJsonErrorString(e: String): String{
+            return Json{serializersModule = errorSerializer}.encodeToString(WSErrorMessage(e)as WSMessage)
         }
 
         get("/") {
@@ -60,7 +63,7 @@ fun Application.module(testing: Boolean = false) {
         webSocket("/user") {
             val thisConnection = Connection(this, null)
             try {
-                send("You are connected! There are ${game.connections.count()} users here.")
+                //send("You are connected! There are ${game.connections.count()} users here.")
                 for (frame in incoming) {
                     frame as? Frame.Text ?: continue
                     val msg = frame.readText()
@@ -72,11 +75,12 @@ fun Application.module(testing: Boolean = false) {
 
                     } catch (e: ConnectionException) {
                         println(e.message)
+                        send(Frame.Text(getJsonErrorString(e.message.toString())))
                         game.connections -= thisConnection
                     } catch (e: IllegalArgumentException) {
                         val repl = "Failed to process the message"
                         println(repl)
-                        send(Frame.Text(repl))
+                        send(Frame.Text(getJsonErrorString(repl)))
                     }
                 }
             } catch (e: Exception) {
@@ -93,7 +97,7 @@ fun Application.module(testing: Boolean = false) {
             val thisConnection = Connection(this, null)
 
             try {
-                send("You are connected! There are ${game.connections.count()} users here.")
+               // send("You are connected! There are ${game.connections.count()} users here.")
                 for (frame in incoming) {
                     frame as? Frame.Text ?: continue
                     val msg = frame.readText()
@@ -105,13 +109,13 @@ fun Application.module(testing: Boolean = false) {
 
                     } catch (e: ConnectionException) {
                         println(e.message)
-                        val repl = Json{serializersModule = errorSerializer}.encodeToString(WSErrorMessage(e.message.toString())as WSMessage)
+                        val repl = getJsonErrorString(e.message.toString())
                         send(Frame.Text(repl))
                         game.connections -= thisConnection
                     } catch (e: IllegalArgumentException) {
                         val repl = "Failed to process the message"
                         println(repl)
-                        send(Frame.Text(Json{serializersModule = errorSerializer}.encodeToString(WSErrorMessage(repl) as WSMessage)))
+                        send(Frame.Text(getJsonErrorString(e.message.toString())))
                     }
 
                 }
@@ -129,6 +133,8 @@ fun Application.module(testing: Boolean = false) {
             call.respond(mapOf("hello" to "world"))
         }
     }
+
+
 }
 
 

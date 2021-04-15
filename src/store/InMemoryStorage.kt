@@ -47,7 +47,7 @@ class InMemoryStorage : Storage {
     override fun setState(gameUUID: String, state: GameState): Boolean {
         if (!games.contains(gameUUID))
             return false
-        val prev = games[gameUUID]!!.state
+        //val prev = games[gameUUID]!!.state
         games[gameUUID]!!.state = state
         for (listener in stateListeners) {
             listener(gameUUID, state)
@@ -65,7 +65,7 @@ class InMemoryStorage : Storage {
         for (team in game.teams) {
             val list = mutableListOf<Question>()
             list.addAll(game.questions!!.subList(i, (i + 1) * k))
-            game.teamToQuestion[team.key] = list;
+            game.teamToQuestion[team.key] = list
             i++
         }
         game.questions = null
@@ -121,7 +121,7 @@ class InMemoryStorage : Storage {
         return games[gameUUID]?.admin
     }
 
-    override fun removeAdmin(gameUUID: String, uuid: String): Boolean {
+    override fun removeAdmin(gameUUID: String, admin_uuid: String): Boolean {
         games[gameUUID]?.admin = null ?: return false
         return true
     }
@@ -162,8 +162,8 @@ class InMemoryStorage : Storage {
 //        return true
 //    }
 
-    override fun removeTeam(gameUUID: String, uuid: String): Boolean {
-        games[gameUUID]?.teams?.remove(uuid)
+    override fun removeTeam(gameUUID: String, team_uuid: String): Boolean {
+        games[gameUUID]?.teams?.remove(team_uuid)
         return true
     }
 
@@ -188,7 +188,7 @@ class InMemoryStorage : Storage {
         TODO("Not yet implemented")
     }
 
-    override fun addUserAnswerResult(question_id: String, player_id: String): Boolean {
+    override fun addUserAnswerResult(question_id: String, player_id: String, correct: Boolean): Boolean {
         TODO("Not yet implemented")
     }
 
@@ -236,6 +236,10 @@ class InMemoryStorage : Storage {
             }
         }
         return null
+    }
+
+    override fun getTeamsWithQuestions(gameUUID: String): HashMap<String, MutableList<String>> {
+        TODO("Not yet implemented")
     }
 
     override fun addQuestionsToTeams(teamsToQuestions: HashMap<String, MutableList<String>>): Boolean {

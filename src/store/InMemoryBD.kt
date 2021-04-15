@@ -9,7 +9,7 @@ import java.sql.Statement
 import java.sql.ResultSet
 
 
-private val CONNECTION_URL = "jdbc:sqlite::memory:";
+private const val CONNECTION_URL = "jdbc:sqlite::memory:"
 
 class InMemoryBD : Storage {
     private var con = DriverManager.getConnection(CONNECTION_URL)
@@ -444,8 +444,19 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun addUserAnswerResult(question_id: String, player_id: String): Boolean {
-        TODO("Not yet implemented")
+    override fun addUserAnswerResult(question_id: String, player_id: String, correct: Boolean): Boolean {
+        return try {
+            val stmt = con.prepareStatement("insert into PlayersToQuestionsResults (player_id, question_id, result) values (?,?,?)")
+                    stmt.setString(1, player_id)
+                    stmt.setString(2, question_id)
+                    stmt.setBoolean(3, correct)
+                    stmt.addBatch()
+            stmt.executeBatch()
+            stmt.close()
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     override fun getTeamsWithPlayers(gameUUID: String): HashMap<String, MutableList<String>> {
@@ -544,6 +555,7 @@ class InMemoryBD : Storage {
                 val questionId = rs.getString(2)
                 if (!res.containsKey(teamId))
                     res[teamId] = mutableListOf(questionId)
+                else
                 res[teamId]!!.add(questionId)
             }
             stmt.close()

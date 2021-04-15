@@ -34,7 +34,7 @@ interface Storage {
 
     fun addQuestion(gameUUID: String, question_id: String, right_answer: String, question: String): Boolean
     fun addWrongAnswer(question_id: String, answer: String, player_id: String): Boolean
-    fun addUserAnswerResult(question_id: String, player_id: String): Boolean
+    fun addUserAnswerResult(question_id: String, player_id: String, correct: Boolean): Boolean
 
     fun getTeamsWithPlayers(gameUUID: String) : HashMap<String, MutableList<String>>
     fun getTeamIds(gameUUID: String): MutableList<String>

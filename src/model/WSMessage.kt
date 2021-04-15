@@ -100,6 +100,10 @@ data class SentAdminPlayerConnectedMessage(val team_id: String, val pl_id: Strin
 @SerialName("ans")
 data class SentAdminGetAnswersMessage(val team_id: String, val question_id: String, val answers: List<String>) : SentAdminMessage()
 
+@Serializable
+@SerialName("rend")
+data class SentAdminRoundEndedMessage(val num: Int) : SentAdminMessage()
+
 //---------------------------------------------------------------------------//
 
 
@@ -146,7 +150,7 @@ data class SentUserJoinMessage(val pl_id: String) : SentUserMessage()
 
 @Serializable
 @SerialName("get_t")
-data class SentUserGetTeamsMessage(val team_ids: List<String>) : SentUserMessage()
+data class SentUserGetTeamsMessage(val team_ids: List<String>, val team_names: List<String>) : SentUserMessage()
 
 
 @Serializable
@@ -165,10 +169,15 @@ object SentUserTimerElapsedMessage : SentUserMessage()
 
 @Serializable
 @SerialName("ans")
-data class SentUserGetAnswersMessage(val question: String, val question_id: String, val answers: List<Answer>) : SentUserMessage()
+data class SentUserGetAnswersMessage(val question: String, val question_id: String, val answers: List<Ans>) : SentUserMessage()
+
+@Serializable
+@SerialName("rend")
+data class SentUserRoundEndedMessage(val num: Int) : SentUserMessage()
 
 //---------------------------------------------------------------------------//
-
+@Serializable
+data class Ans (val key: Int, val value: String)
 
 
 //return WSMessage( when () {

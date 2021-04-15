@@ -5,6 +5,8 @@ import com.diploma.model.Question
 import com.diploma.service.Game
 import com.diploma.service.GameState
 import com.diploma.store.InMemoryBD
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlin.test.*
 import java.util.*
 
@@ -172,25 +174,35 @@ class DBTests {
         succ = bd.createTeam(game, team2, "Team2")
         team1PlayerList.forEachIndexed { index, s ->
             succ = bd.addUser(game, s, "Player$index", team1)
-            println(s)
+            //println(s)
         }
         println("---------------")
         team2PlayerList.forEachIndexed { index, s ->
             succ = bd.addUser(game, s, "Player$index", team2)
-            println(s)
+            //println(s)
         }
         println("---------------")
 
         for (i in 1..8) {
             val question = Question("question$i", mutableListOf(Answer("Answer$i", true)))
             succ = bd.addQuestion(game, question.id, question.answers.first().text, question.text)
+            succ = bd.addWrongAnswer(question.id,"WrongAnswer$i",team1PlayerList[0])
+            succ = bd.addWrongAnswer(question.id,"Wrong1Answer$i",team1PlayerList[1])
+            succ = bd.addWrongAnswer(question.id,"Wrong2Answer$i",team1PlayerList[2])
         }
 
-        println("---------------")
-        println("---------------")
 
-        gameInstance.distributeQuestions(game).forEach { println("${it.key} -- ${it.value}") }
-       // bd.executeQuery("select * from TeamsToQuestions;")
+
+       // gameInstance.distributeQuestions(game).forEach { println("${it.key} -- ${it.value}") }
+         runBlocking {gameInstance.startRound(game,1,5)
+             delay(500)
+         }
+        println("---------------")
+        println("---------------")
+        runBlocking { gameInstance.startRound(game,2,5)
+        }
+
+
 
 
     }
@@ -207,6 +219,19 @@ class DBTests {
         val state = bd.getState(game)
         assertEquals(state, GameState.MID)
     }
+
+    @Test
+    fun testGame() {
+        val code = "123"
+        val admin = UUID.randomUUID().toString()
+        val game = UUID.randomUUID().toString()
+        var succ = bd.addAdmin(admin, "Kek")
+        succ = bd.createGame(game, admin, code)
+        bd.setState(game, GameState.MID)
+        val state = bd.getState(game)
+        assertEquals(state, GameState.MID)
+    }
+
 
 
 }
