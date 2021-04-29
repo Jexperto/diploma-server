@@ -94,7 +94,7 @@ data class SentAdminStartMessage(val num: Int, val max_ans: Int) : SentAdminMess
 
 @Serializable
 @SerialName("pl_con")
-data class SentAdminPlayerConnectedMessage(val team_id: String, val pl_id: String) : SentAdminMessage()
+data class SentAdminPlayerConnectedMessage(val team_id: String,val nick: String, val pl_id: String) : SentAdminMessage()
 
 @Serializable
 @SerialName("ans")

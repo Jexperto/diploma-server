@@ -82,6 +82,10 @@ fun Application.server(testing: Boolean = false) {
                         println(repl)
                         send(Frame.Text(getJsonErrorString(repl)))
                     }
+                    catch (e: SoftException) {
+                        println(e.message)
+                        send(Frame.Text(getJsonErrorString(e.message.toString())))
+                    }
                 }
             } catch (e: Exception) {
                 println(e.localizedMessage)
@@ -139,3 +143,4 @@ fun Application.server(testing: Boolean = false) {
 
 
 class ConnectionException(message: String?) : Exception(message) {}
+class SoftException(message: String?) : Exception(message) {}

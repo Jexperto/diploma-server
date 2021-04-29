@@ -343,6 +343,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                 thisConnection.uuid!!, getJsonAdminMessageString(
                     SentAdminPlayerConnectedMessage(
                         message.team_id,
+                        storage.getUserName(thisConnection.uuid!!).toString(),
                         thisConnection.uuid!!
                     )
                 ), ConnectionManager.Type.USER
@@ -355,13 +356,13 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
 
     private fun handleUserJoinMessage(thisConnection: Connection, message: ReceivedUserJoinMessage): String {
         if (thisConnection.uuid != null) {
-            throw Exception("You already have an active session")
+            throw SoftException("You already have an active session")
         }
         thisConnection.uuid = UUID.randomUUID().toString()
         val gameID =
-            com.diploma.storage.findGameByCode(message.code) ?: throw Exception("Game code does not exist")
+            com.diploma.storage.findGameByCode(message.code) ?: throw SoftException("Game code does not exist")
         if (!joinGame(gameID, thisConnection.uuid.toString(), message.nick, null)) {
-            throw Exception("Couldn't join user to a game")
+            throw SoftException("Couldn't join user to a game")
         }
         val adminUuid = gameID.let { storage.getAdmin(it) }
         connections.add(
