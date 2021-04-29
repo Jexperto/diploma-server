@@ -62,6 +62,7 @@ fun Application.server(testing: Boolean = false) {
         //ws://localhost:8080/admin
         webSocket("/user") {
             val thisConnection = Connection(this, null)
+            println("Adding connection $thisConnection");
             try {
                 //send("You are connected! There are ${game.connections.count()} users here.")
                 for (frame in incoming) {

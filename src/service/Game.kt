@@ -358,9 +358,9 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         if (thisConnection.uuid != null) {
             throw SoftException("You already have an active session")
         }
-        thisConnection.uuid = UUID.randomUUID().toString()
         val gameID =
             com.diploma.storage.findGameByCode(message.code) ?: throw SoftException("Game code does not exist")
+        thisConnection.uuid = UUID.randomUUID().toString()
         if (!joinGame(gameID, thisConnection.uuid.toString(), message.nick, null)) {
             throw SoftException("Couldn't join user to a game")
         }
