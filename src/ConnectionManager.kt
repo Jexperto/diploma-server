@@ -28,6 +28,9 @@ class ConnectionManager { //TODO: clear data upon game closure
         idToConnection[thisConnection.uuid!!] = thisConnection
     }
 
+    fun getConnections(): Collection<Connection> {
+        return idToConnection.values
+    }
     fun removeUser(userConnection: Connection) {
         userConnection.uuid?.let { removeUser(it) }
     }

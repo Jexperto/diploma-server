@@ -100,7 +100,7 @@ fun Application.server(testing: Boolean = false) {
 // ws://localhost:8080/admin
         webSocket("/admin") {
             val thisConnection = Connection(this, null)
-
+            println("Created $thisConnection")
             try {
                // send("You are connected! There are ${game.connections.count()} users here.")
                 for (frame in incoming) {
@@ -118,7 +118,7 @@ fun Application.server(testing: Boolean = false) {
                         send(Frame.Text(repl))
                         game.connections -= thisConnection
                     } catch (e: IllegalArgumentException) {
-                        val repl = "Failed to process the message"
+                        val repl = "Failed to process the message\n ${e.message}"
                         println(repl)
                         send(Frame.Text(getJsonErrorString(e.message.toString())))
                     }
@@ -127,7 +127,7 @@ fun Application.server(testing: Boolean = false) {
             } catch (e: Exception) {
                 println(e.localizedMessage)
             } finally {
-                println("Removing $thisConnection!")
+                println("Removing $thisConnection! with ${thisConnection.uuid}")
                 game.connections -= thisConnection
             }
         }
