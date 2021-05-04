@@ -37,8 +37,8 @@ class DBTests {
         succ = bd.createGame(game, admin, code)
         succ = bd.createTeam(game, team1, "Team1")
         succ = bd.createTeam(game, team2, "Team2")
-        succ = bd.addUser(game, player2, "Player2", team2)
-        succ = bd.addUser(game, player1, "Player1", team1)
+        succ = bd.addUser(game, player2, "Player2", game, team2)
+        succ = bd.addUser(game, player1, "Player1", game, team1)
         val question = Question("question", mutableListOf(Answer("Answer", true)))
         val question2 = Question("question2", mutableListOf(Answer("Answer2", true)))
         succ = bd.addQuestion(game, question.id, question.answers.first().text, question.text)
@@ -84,22 +84,27 @@ class DBTests {
 
     @Test
     fun testUser() {
-        val code = "123"
-        val admin = UUID.randomUUID().toString()
-        val user = UUID.randomUUID().toString()
-        val game = UUID.randomUUID().toString()
-        val team = UUID.randomUUID().toString()
-        var succ = bd.addAdmin(admin, "Kek")
-        succ = bd.createGame(game, admin, code)
-        succ = bd.createTeam(game, team, "kek")
-        bd.addUser(game, user, "Kek", team)
-        val dbUserTeam = bd.getUserTeam(user)
-        val dbUserName = bd.getUserName(user)
-        println()
-        assertEquals(team, dbUserTeam)
-        assertEquals("Kek", dbUserName)
-        val bdGame = bd.findGameByUser(user)
-        assertEquals(game, bdGame)
+        val test = {
+            val code = "123"
+            val admin = UUID.randomUUID().toString()
+            val user = UUID.randomUUID().toString()
+            val game = UUID.randomUUID().toString()
+            val team = UUID.randomUUID().toString()
+            var succ = bd.addAdmin(admin, "Kek")
+            succ = bd.createGame(game, admin, code)
+            succ = bd.createTeam(game, team, "kek")
+            bd.addUser(game, user, "Kek", game, team)
+            val dbUserTeam = bd.getUserTeam(user)
+            val dbUserName = bd.getUserName(user)
+            assertEquals(team, dbUserTeam)
+            assertEquals("Kek", dbUserName)
+            val bdGame = bd.findGameByUser(user)
+            assertEquals(game, bdGame)
+        }
+        test()
+        test()
+
+
     }
 
     @Test
@@ -115,8 +120,8 @@ class DBTests {
         succ = bd.createGame(game, admin, code)
         succ = bd.createTeam(game, team1, "Team1")
         succ = bd.createTeam(game, team2, "Team2")
-        succ = bd.addUser(game, player2, "Player2", team2)
-        succ = bd.addUser(game, player1, "Player1", team1)
+        succ = bd.addUser(game, player2, "Player2", game, team2)
+        succ = bd.addUser(game, player1, "Player1", game, team1)
         val question = Question("question", mutableListOf(Answer("Answer", true)))
         val question2 = Question("question2", mutableListOf(Answer("Answer2", true)))
         succ = bd.addQuestion(game, question.id, question.answers.first().text, question.text)
@@ -136,6 +141,35 @@ class DBTests {
     }
 
 
+    @Test
+    fun testTeamsWithPlayers() {
+        val code = "123"
+        val admin = UUID.randomUUID().toString()
+        val game = UUID.randomUUID().toString()
+        val team1 = UUID.randomUUID().toString()
+        val team2 = UUID.randomUUID().toString()
+        val team3 = UUID.randomUUID().toString()
+        val player1 = UUID.randomUUID().toString()
+        val player2 = UUID.randomUUID().toString()
+        var succ = bd.addAdmin(admin, "Kek")
+        succ = bd.createGame(game, admin, code)
+        succ = bd.createTeam(game, team1, "Yankees")
+        succ = bd.createTeam(game, team2, "Wolves")
+        succ = bd.createTeam(game, team3, "Bears")
+        succ = bd.addUser(game, player2, "Player2", game, team2)
+        succ = bd.addUser(game, player1, "Player1", game, team1)
+        val map = bd.getTeams(game)
+        map.forEach { t, u -> println("key: $t -- value: $u") }
+        assertEquals(map[team1], "Yankees")
+        assertEquals(map[team2], "Wolves")
+        assertEquals(map[team3], "Bears")
+        println("--------------")
+        val twp = bd.getTeamsWithPlayers(game)
+        twp.onEach { println(it) }
+        val twpn = bd.getTeamsWithPlayersAndNames(game)
+        twpn.onEach { println(it) }
+
+    }
     @Test
     fun testTeams() {
         val code = "123"
@@ -173,12 +207,12 @@ class DBTests {
         succ = bd.createTeam(game, team1, "Team1")
         succ = bd.createTeam(game, team2, "Team2")
         team1PlayerList.forEachIndexed { index, s ->
-            succ = bd.addUser(game, s, "Player$index", team1)
+            succ = bd.addUser(game, s, "Player$index", game, team1)
             //println(s)
         }
         println("---------------")
         team2PlayerList.forEachIndexed { index, s ->
-            succ = bd.addUser(game, s, "Player$index", team2)
+            succ = bd.addUser(game, s, "Player$index", game, team2)
             //println(s)
         }
         println("---------------")
@@ -186,23 +220,22 @@ class DBTests {
         for (i in 1..8) {
             val question = Question("question$i", mutableListOf(Answer("Answer$i", true)))
             succ = bd.addQuestion(game, question.id, question.answers.first().text, question.text)
-            succ = bd.addWrongAnswer(question.id,"WrongAnswer$i",team1PlayerList[0])
-            succ = bd.addWrongAnswer(question.id,"Wrong1Answer$i",team1PlayerList[1])
-            succ = bd.addWrongAnswer(question.id,"Wrong2Answer$i",team1PlayerList[2])
+            succ = bd.addWrongAnswer(question.id, "WrongAnswer$i", team1PlayerList[0])
+            succ = bd.addWrongAnswer(question.id, "Wrong1Answer$i", team1PlayerList[1])
+            succ = bd.addWrongAnswer(question.id, "Wrong2Answer$i", team1PlayerList[2])
         }
 
 
-
-       // gameInstance.distributeQuestions(game).forEach { println("${it.key} -- ${it.value}") }
-         runBlocking {gameInstance.startRound(game,1,5)
-             delay(500)
-         }
-        println("---------------")
-        println("---------------")
-        runBlocking { gameInstance.startRound(game,2,5)
+        // gameInstance.distributeQuestions(game).forEach { println("${it.key} -- ${it.value}") }
+        runBlocking {
+            gameInstance.startRound(game, 1, 5)
+            delay(500)
         }
-
-
+        println("---------------")
+        println("---------------")
+        runBlocking {
+            gameInstance.startRound(game, 2, 5)
+        }
 
 
     }
@@ -231,7 +264,6 @@ class DBTests {
         val state = bd.getState(game)
         assertEquals(state, GameState.MID)
     }
-
 
 
 }

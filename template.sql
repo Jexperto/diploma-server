@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS Players
 (
     id      TEXT primary key,
     team_id TEXT,
+    room_id TEXT not null,
     name    TEXT not null,
     foreign key (team_id)
         references Teams (id)
@@ -112,14 +113,13 @@ select id, question
 from Questions
 where room_id == :1
 
-
 select Players.id, Players.team_id from Players, Teams where room_id == ? and Players.team_id == Teams.id;
 
 select team_id,question_id from TeamsToQuestions, Teams where TeamsToQuestions.team_id == Teams.id and Teams.room_id == ?;
 
 select id,question from Questions where room_id == :1
 
-select room_id from Teams inner join (select (team_id) from Players where id == ?);
+select room_id from Teams inner join (select team_id from Players where id == ?) as sel on Teams.id==sel.team_id;
 
 -- select Questions.id as question_id, question, answer, valid from Questions inner join  (
 --     select id, right_answer as answer, true as valid from Questions where room_id == :1

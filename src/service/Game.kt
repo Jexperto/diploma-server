@@ -66,7 +66,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                 GameState.MID -> println("MID")
                 GameState.ROUND2 -> println("ROUND2")
                 GameState.FINISH -> println("FINISH")
-                GameState.WAITING -> TODO()
+                GameState.WAITING -> println("WAITING")
             }
         }
     }
@@ -78,8 +78,6 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         jobs[id] = hashSetOf()
         storage.addAdmin(admin_uuid, admin_name)
         if (storage.createGame(id, admin_uuid, code)) {
-            storage.createTeam(id, team1, "Red")
-            storage.createTeam(id, team2, "White")
             return id
         }
         return null
@@ -145,8 +143,6 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                 }
             }.encodeToString(WSErrorMessage(e.message.toString()) as WSMessage)), ConnectionManager.Type.ADMIN)
         }
-
-
     }
 
     data class QuestionIDnText(val id: String, val text: String)
@@ -155,7 +151,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         val playerToQuest = hashMapOf<String, MutableList<QuestionIDnText>>()
 
         val questions = storage.getQuestions(gameUUID).shuffled()
-        val teams = storage.getTeamsWithPlayers(gameUUID)
+        val teams = storage.getTeamsWithPlayers(gameUUID).onEach { println(it)}
         val ids = teams.keys
         if (teams.count() == 0) throw ArithmeticException("There are no teams or teams are empty")
         val questPerTeam = questions.size / ids.size
@@ -214,9 +210,9 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                 val teamUUID = teamsWithQuestions[tIdx].first
                 val questionUUIDs = pair.second
                 val questions = gameToQuestions[gameUUID]
-                val question = questions?.get(questionUUIDs[i]) ?: throw Exception("Couldn't find question")
+                val question = questions?.get(questionUUIDs[i]) ?: throw SoftException("Couldn't find question")
                 val rightAnswerId = (0 until question.answers.size).random()
-                val ans = formAnswers(question.answers, rightAnswerId) ?: throw Exception("Couldn't form answers")
+                val ans = formAnswers(question.answers, rightAnswerId) ?: throw SoftException("Couldn't form answers")
                 gameToQuestionAnswers[gameUUID]?.put(question.id, rightAnswerId)
                 connections.sendToUsers(
                     teams[pair.first] as List<String>, getJsonUserMessageString(
@@ -274,12 +270,13 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
 
             else -> {
                 if (thisConnection.uuid == null) {
-                    throw Exception("You don't have any active sessions")
+                    throw SoftException("You don't have any active sessions")
                 }
                 val gameUuid =
                     com.diploma.storage.findGameByUser(thisConnection.uuid!!) ?: throw ConnectionException(
                         "Game not found. Closing connection"
                     )
+
                 when (storage.getState(gameUuid)) {
                     GameState.WAITING -> when (message) {
 
@@ -348,10 +345,17 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                     )
                 ), ConnectionManager.Type.USER
             )
+            connections.sendAllUsers(connections.getAdminID(thisConnection.uuid!!).toString(),getJsonUserMessageString(
+                SentUserPlayerConnectedMessage(
+                    message.team_id,
+                    storage.getUserName(thisConnection.uuid!!).toString(),
+                    thisConnection.uuid!!
+                )
+            ))
 
             return getJsonUserMessageString(SentUserJoinTeamMessage(message.team_id))
         }
-        throw Exception("Couldn't join a team")
+        throw SoftException("Couldn't join a team")
     }
 
     private fun handleUserJoinMessage(thisConnection: Connection, message: ReceivedUserJoinMessage): String {
@@ -361,6 +365,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         val gameID =
             com.diploma.storage.findGameByCode(message.code) ?: throw SoftException("Game code does not exist")
         thisConnection.uuid = UUID.randomUUID().toString()
+        val players = storage.getTeamsWithPlayersAndNames(gameID)
         if (!joinGame(gameID, thisConnection.uuid.toString(), message.nick, null)) {
             throw SoftException("Couldn't join user to a game")
         }
@@ -369,7 +374,15 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
             thisConnection, ConnectionManager.Type.USER,
             adminUuid
         )
-        return getJsonUserMessageString(SentUserJoinMessage(thisConnection.uuid!!))
+        val res = mutableListOf<Player>()
+        players.forEach{ (team, players) ->
+            players.forEach{(id,name) ->
+                res.add(Player(id,name,team))
+            }
+        }
+        println("handleUserJoinMessage -- players -- $res")
+
+        return getJsonUserMessageString(SentUserJoinMessage(thisConnection.uuid!!, res))
 
     }
 
@@ -380,7 +393,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
             is ReceivedAdminJoinMessage -> return handleAdminJoinMessage(thisConnection, message)
             else -> {
                 if (thisConnection.uuid == null) {
-                    throw Exception("You don't have any active sessions")
+                    throw SoftException("You don't have any active sessions")
                 }
                 val gameUUID =
                     com.diploma.storage.findGameByAdmin(thisConnection.uuid!!) ?: throw ConnectionException(
@@ -391,6 +404,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                     GameState.WAITING -> {
                         return when (message) {
                             is ReceivedAdminAddQstMessage -> handleAdminAddQuestionMessage(gameUUID, message)
+                            is ReceivedAdminAddTeamsMessage -> handleAdminAddTeamsMessage(gameUUID, message)
                             is ReceivedAdminStartRoundMessage -> handleAdminStartRoundMessage(gameUUID, message)
                             is ReceivedAdminCloseMessage -> handleAdminCloseMessage(gameUUID)
                             else -> null
@@ -425,10 +439,20 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         return null
     }
 
+    private fun handleAdminAddTeamsMessage(gameUUID: String, message: ReceivedAdminAddTeamsMessage): String{
+        val ids = mutableListOf<String>()
+        message.team_names.forEach { teamName ->
+            val teamUUID = UUID.randomUUID().toString()
+            if (storage.createTeam(gameUUID, teamUUID, teamName))
+                ids.add(teamUUID)
+        }
+        return getJsonAdminMessageString(SentAdminAddTeamsMessage(ids))
+    }
+
 
     private fun handleAdminJoinMessage(thisConnection: Connection, message: ReceivedAdminJoinMessage): String {
         if (thisConnection.uuid != null) {
-            throw Exception("You already have an active session")
+            throw SoftException("You already have an active session")
         }
         val game = com.diploma.storage.findGameByAdmin(message.admin_id)
             ?: throw ConnectionException("Game not found. Closing connection")
@@ -442,17 +466,16 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         message: ReceivedAdminCreateMessage
     ): String {
         if (thisConnection.uuid != null) {
-            throw Exception("You already have an active session")
+            throw SoftException("You already have an active session")
         }
         thisConnection.uuid = UUID.randomUUID().toString()
         connections.add(thisConnection, ConnectionManager.Type.ADMIN)
         val code = getRandomString(6).also { println(it) }
-        createGame(thisConnection.uuid!!, message.nick, code) ?: throw Exception("Couldn't create a game")
+        createGame(thisConnection.uuid!!, message.nick, code) ?: throw SoftException("Couldn't create a game")
         val reply = SentAdminCreateMessage(
             code, thisConnection.uuid!!
         )
 
-        println("admin_id: $thisConnection.uuid")
         return getJsonAdminMessageString(reply)
     }
 
@@ -491,7 +514,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
     }
 
     private fun joinGame(gameID: String, player_uuid: String, name: String, team_uuid: String?): Boolean {
-        storage.addUser(gameID, player_uuid, name, team_uuid)
+        storage.addUser(gameID, player_uuid, name, gameID,team_uuid)
         return true
     }
 

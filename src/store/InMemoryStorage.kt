@@ -126,9 +126,19 @@ class InMemoryStorage : Storage {
         return true
     }
 
-    override fun addUser(gameUUID: String, player_id: String, name: String, team_id: String?): Boolean {
+    override fun addUser(
+        gameUUID: String,
+        player_id: String,
+        name: String,
+        room_id: String,
+        team_id: String?
+    ): Boolean {
         TODO("Not yet implemented")
     }
+
+//    override fun addUser(gameUUID: String, player_id: String, name: String, team_id: String?): Boolean {
+//        TODO("Not yet implemented")
+//    }
 
 //    override fun addUser(gameUUID: String, uuid: String): Boolean {
 //        games[gameUUID]?.users?.add(uuid) ?: return false
@@ -189,6 +199,10 @@ class InMemoryStorage : Storage {
     }
 
     override fun addUserAnswerResult(question_id: String, player_id: String, correct: Boolean): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    override fun getTeamsWithPlayersAndNames(gameUUID: String): HashMap<String, MutableList<Pair<String, String>>> {
         TODO("Not yet implemented")
     }
 

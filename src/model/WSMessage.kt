@@ -59,6 +59,10 @@ data class ReceivedAdminJoinMessage(val admin_id: String) : ReceivedAdminMessage
 data class ReceivedAdminAddQstMessage(val question: String, val answer: String) : ReceivedAdminMessage()
 
 @Serializable
+@SerialName("add_t")
+data class ReceivedAdminAddTeamsMessage(val team_names: List<String>) : ReceivedAdminMessage()
+
+@Serializable
 @SerialName("start")
 data class ReceivedAdminStartRoundMessage(val num: Int, val timer: Int) : ReceivedAdminMessage()
 
@@ -87,6 +91,10 @@ data class SentAdminJoinMessage(val code: String) : SentAdminMessage()
 @Serializable
 @SerialName("add_question")
 data class SentAdminAddQstMessage(val question_id: String) : SentAdminMessage()
+
+@Serializable
+@SerialName("add_t")
+data class SentAdminAddTeamsMessage(val team_ids: List<String>) : SentAdminMessage()
 
 @Serializable
 @SerialName("start")
@@ -146,12 +154,15 @@ object SentUserBasicMessage : SentUserMessage()
 
 @Serializable
 @SerialName("join")
-data class SentUserJoinMessage(val pl_id: String) : SentUserMessage()
+data class SentUserJoinMessage(val pl_id: String, val players: List<Player>) : SentUserMessage()
 
 @Serializable
 @SerialName("get_t")
 data class SentUserGetTeamsMessage(val team_ids: List<String>, val team_names: List<String>) : SentUserMessage()
 
+@Serializable
+@SerialName("pl_con")
+data class SentUserPlayerConnectedMessage(val team_id: String,val nick: String, val pl_id: String) : SentUserMessage()
 
 @Serializable
 @SerialName("join_t")
@@ -178,6 +189,9 @@ data class SentUserRoundEndedMessage(val num: Int) : SentUserMessage()
 //---------------------------------------------------------------------------//
 @Serializable
 data class Ans (val key: Int, val value: String)
+
+@Serializable
+data class Player (val pl_id: String , val nick: String, val team_id: String)
 
 
 //return WSMessage( when () {

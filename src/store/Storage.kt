@@ -20,7 +20,7 @@ interface Storage {
     fun getAdmin(gameUUID: String,) : String?
     fun removeAdmin(gameUUID: String,admin_uuid: String) : Boolean
 
-    fun addUser(gameUUID: String, player_id: String, name: String, team_id: String? = null): Boolean
+    fun addUser(gameUUID: String, player_id: String, name: String,room_id:String, team_id: String?): Boolean
     fun removeUser(gameUUID: String, uuid: String) : Boolean
 
     fun addToTeam(gameUUID: String, team_uuid: String, user_uuid:String) : Boolean
@@ -36,6 +36,8 @@ interface Storage {
     fun addWrongAnswer(question_id: String, answer: String, player_id: String): Boolean
     fun addUserAnswerResult(question_id: String, player_id: String, correct: Boolean): Boolean
 
+
+    fun getTeamsWithPlayersAndNames(gameUUID: String): HashMap<String, MutableList<Pair<String,String>>>
     fun getTeamsWithPlayers(gameUUID: String) : HashMap<String, MutableList<String>>
     fun getTeamIds(gameUUID: String): MutableList<String>
     fun getTeams(gameUUID: String): HashMap<String,String>

@@ -60,6 +60,7 @@ class InMemoryBD : Storage {
                     "(\n" +
                     "    id      TEXT primary key,\n" +
                     "    team_id TEXT,\n" +
+                    "    room_id TEXT not null,\n" +
                     "    name    TEXT not null,\n" +
                     "    foreign key (team_id)\n" +
                     "        references Teams (id)\n" +
@@ -295,6 +296,7 @@ class InMemoryBD : Storage {
 
     override fun addToTeam(gameUUID: String, team_uuid: String, user_uuid: String): Boolean {
         return try {
+            //todo: check for id
             val stmt = con.prepareStatement("update Players set team_id = ? where id = ?")
             stmt.setString(1, team_uuid)
             stmt.setString(2, user_uuid)
@@ -306,12 +308,13 @@ class InMemoryBD : Storage {
         }
     }
 
-    override fun addUser(gameUUID: String, player_id: String, name: String, team_id: String?): Boolean {
+    override fun addUser(gameUUID: String, player_id: String, name: String,room_id:String, team_id: String?): Boolean {
         return try {
-            val stmt = con.prepareStatement("insert into Players (id, team_id, name) values (?,?,?)")
+            val stmt = con.prepareStatement("insert into Players (id, team_id, room_id, name) values (?,?,?,?)")
             stmt.setString(1, player_id)
             stmt.setString(2, team_id)
-            stmt.setString(3, name)
+            stmt.setString(3, room_id)
+            stmt.setString(4, name)
             stmt.execute()
             stmt.close()
             true
@@ -446,11 +449,12 @@ class InMemoryBD : Storage {
 
     override fun addUserAnswerResult(question_id: String, player_id: String, correct: Boolean): Boolean {
         return try {
-            val stmt = con.prepareStatement("insert into PlayersToQuestionsResults (player_id, question_id, result) values (?,?,?)")
-                    stmt.setString(1, player_id)
-                    stmt.setString(2, question_id)
-                    stmt.setBoolean(3, correct)
-                    stmt.addBatch()
+            val stmt =
+                con.prepareStatement("insert into PlayersToQuestionsResults (player_id, question_id, result) values (?,?,?)")
+            stmt.setString(1, player_id)
+            stmt.setString(2, question_id)
+            stmt.setBoolean(3, correct)
+            stmt.addBatch()
             stmt.executeBatch()
             stmt.close()
             true
@@ -459,11 +463,32 @@ class InMemoryBD : Storage {
         }
     }
 
+
+    override fun getTeamsWithPlayersAndNames(gameUUID: String): HashMap<String, MutableList<Pair<String,String>>> {
+        return try {
+            val map = hashMapOf<String, MutableList<Pair<String,String>>>()
+            val stmt =
+                con.prepareStatement("select Players.id, Players.team_id, Players.name from Players, Teams where Teams.room_id == ? and Players.team_id == Teams.id;")
+            stmt.setString(1, gameUUID)
+            val res = stmt.executeQuery()
+            while (res.next()) {
+                val playerID = res.getString(1)
+                val teamID = res.getString(2)
+                val name = res.getString(3)
+                map[teamID]?.add(Pair(playerID,name)) ?: map.put(teamID, mutableListOf(Pair(playerID,name)))
+            }
+            stmt.close()
+            return map
+        } catch (e: Exception) {
+            hashMapOf()
+        }
+    }
+
     override fun getTeamsWithPlayers(gameUUID: String): HashMap<String, MutableList<String>> {
         return try {
             val map = hashMapOf<String, MutableList<String>>()
             val stmt =
-                con.prepareStatement("select Players.id, Players.team_id from Players, Teams where room_id == ? and Players.team_id == Teams.id;")
+                con.prepareStatement("select Players.id, Players.team_id from Players, Teams where Teams.room_id == ? and Players.team_id == Teams.id;")
             stmt.setString(1, gameUUID)
             val res = stmt.executeQuery()
             while (res.next()) {
@@ -493,6 +518,7 @@ class InMemoryBD : Storage {
         return try {
             val map = hashMapOf<String, String>()
             val stmt = con.prepareStatement("select id,name from Teams where room_id = ?;")
+            println("getTeams -- gameUUID: $gameUUID")
             stmt.setString(1, gameUUID)
             val res = stmt.executeQuery()
             while (res.next())
@@ -532,11 +558,15 @@ class InMemoryBD : Storage {
     override fun findGameByUser(uuid: String): String? {
         return try {
             val stmt =
-                con.prepareStatement("select room_id from Teams inner join (select (team_id) from Players where id == ?);")
+                con.prepareStatement("select room_id from Players where Players.id==?;")
             stmt.setString(1, uuid)
-            val res = stmt.executeQuery().getString(1)
-            stmt.close()
-            res
+            val resultSet = stmt.executeQuery()
+            if (resultSet.next()) {
+                val res = resultSet.getString(1)
+                stmt.close()
+                return res
+            }
+            null
         } catch (e: Exception) {
             null
         }
@@ -547,7 +577,8 @@ class InMemoryBD : Storage {
     override fun getTeamsWithQuestions(gameUUID: String): HashMap<String, MutableList<String>> {
         return try {
             val res = hashMapOf<String, MutableList<String>>()
-            val stmt = con.prepareStatement("select team_id,question_id from TeamsToQuestions, Teams where TeamsToQuestions.team_id == Teams.id and Teams.room_id == ?;")
+            val stmt =
+                con.prepareStatement("select team_id,question_id from TeamsToQuestions, Teams where TeamsToQuestions.team_id == Teams.id and Teams.room_id == ?;")
             stmt.setString(1, gameUUID)
             val rs = stmt.executeQuery()
             while (rs.next()) {
@@ -556,7 +587,7 @@ class InMemoryBD : Storage {
                 if (!res.containsKey(teamId))
                     res[teamId] = mutableListOf(questionId)
                 else
-                res[teamId]!!.add(questionId)
+                    res[teamId]!!.add(questionId)
             }
             stmt.close()
             res
