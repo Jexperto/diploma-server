@@ -80,6 +80,14 @@ class InMemoryStorage : Storage {
         TODO("Not yet implemented")
     }
 
+    override fun setTeamPoints(gameUUID: String, team_uuid: String, value: Int): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    override fun getTeamPoints(gameUUID: String, team_uuid: String): Boolean {
+        TODO("Not yet implemented")
+    }
+
     override fun getState(gameUUID: String): GameState? {
         return games[gameUUID]?.state
     }

@@ -49,6 +49,7 @@ class InMemoryBD : Storage {
                     "    id      TEXT primary key,\n" +
                     "    room_id TEXT not null,\n" +
                     "    name    TEXT not null,\n" +
+                    "    points  INTEGER not null,\n" +
                     "    foreign key (room_id)\n" +
                     "        references Rooms (id)\n" +
                     "        on delete cascade\n" +
@@ -270,10 +271,11 @@ class InMemoryBD : Storage {
 
     override fun createTeam(gameUUID: String, team_uuid: String, name: String): Boolean {
         return try {
-            val stmt = con.prepareStatement("insert into Teams (room_id, id, name) values (?,?,?)")
+            val stmt = con.prepareStatement("insert into Teams (room_id, id, name, points) values (?,?,?,?)")
             stmt.setString(1, gameUUID)
             stmt.setString(2, team_uuid)
             stmt.setString(3, name)
+            stmt.setInt(4, 0);
             stmt.execute()
             stmt.close()
             true
@@ -281,6 +283,32 @@ class InMemoryBD : Storage {
             false
         }
     }
+
+    override fun setTeamPoints(gameUUID: String, team_uuid: String, value: Int): Boolean {
+        return try {
+            val stmt = con.prepareStatement("update Teams set points = ? where id = ?")
+            stmt.setInt(1, value)
+            stmt.setString(2, team_uuid)
+            stmt.executeUpdate()
+            stmt.close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    override fun getTeamPoints(gameUUID: String, team_uuid: String): Boolean {
+        return try {
+            val stmt = con.prepareStatement("select points from Teams where id=?")
+            stmt.setString(1, team_uuid)
+            stmt.executeUpdate()
+            stmt.close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
 
     override fun removeTeam(gameUUID: String, team_uuid: String): Boolean {
         return try {

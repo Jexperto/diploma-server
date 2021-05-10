@@ -170,6 +170,7 @@ class DBTests {
         twpn.onEach { println(it) }
 
     }
+
     @Test
     fun testTeams() {
         val code = "123"
@@ -220,23 +221,15 @@ class DBTests {
         for (i in 1..8) {
             val question = Question("question$i", mutableListOf(Answer("Answer$i", true)))
             succ = bd.addQuestion(game, question.id, question.answers.first().text, question.text)
-            succ = bd.addWrongAnswer(question.id, "WrongAnswer$i", team1PlayerList[0])
-            succ = bd.addWrongAnswer(question.id, "Wrong1Answer$i", team1PlayerList[1])
-            succ = bd.addWrongAnswer(question.id, "Wrong2Answer$i", team1PlayerList[2])
+//            succ = bd.addWrongAnswer(question.id, "WrongAnswer$i", team1PlayerList[0])
+//            succ = bd.addWrongAnswer(question.id, "Wrong1Answer$i", team1PlayerList[1])
+//            succ = bd.addWrongAnswer(question.id, "Wrong2Answer$i", team1PlayerList[2])
         }
 
-
-        // gameInstance.distributeQuestions(game).forEach { println("${it.key} -- ${it.value}") }
-        runBlocking {
-            gameInstance.startRound(game, 1, 5)
-            delay(500)
-        }
-        println("---------------")
-        println("---------------")
-        runBlocking {
-            gameInstance.startRound(game, 2, 5)
-        }
-
+        val (a, b) = gameInstance.distributeQuestions(game)
+        a.forEach { println("${it.key} -- ${it.value}") }
+        b.forEach { println("${it.key} -- ${it.value}") }
+        bd.executeQuery("select * from TeamsToQuestions;")
 
     }
 

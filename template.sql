@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS Teams
     id      TEXT primary key,
     room_id TEXT not null,
     name    TEXT not null,
+    points  INTEGER not null,
     foreign key (room_id)
         references Rooms (id)
         on delete cascade

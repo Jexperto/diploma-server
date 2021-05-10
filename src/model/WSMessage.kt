@@ -1,6 +1,5 @@
 package com.diploma
 
-import com.diploma.model.Answer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -98,11 +97,19 @@ data class SentAdminAddTeamsMessage(val team_ids: List<String>) : SentAdminMessa
 
 @Serializable
 @SerialName("start")
-data class SentAdminStartMessage(val num: Int, val max_ans: Int) : SentAdminMessage()
+data class SentAdminStartMessage(val num: Int) : SentAdminMessage()
+
+@Serializable
+@SerialName("max_ans")
+data class SentAdminMaxAnsMessage(val teams: List<TeamMaxAns>) : SentAdminMessage()
 
 @Serializable
 @SerialName("pl_con")
 data class SentAdminPlayerConnectedMessage(val team_id: String,val nick: String, val pl_id: String) : SentAdminMessage()
+
+@Serializable
+@SerialName("wr_ans")
+data class SentAdminWrongAnswerMessage(val pl_id: String, val question_id: String,val answer: String) : SentAdminMessage()
 
 @Serializable
 @SerialName("ans")
@@ -112,8 +119,15 @@ data class SentAdminGetAnswersMessage(val team_id: String, val question_id: Stri
 @SerialName("rend")
 data class SentAdminRoundEndedMessage(val num: Int) : SentAdminMessage()
 
-//---------------------------------------------------------------------------//
+@Serializable
+@SerialName("points")
+data class SentAdminPointsUpdatedMessage(val team_id: String, val num: Int) : SentAdminMessage()
 
+@Serializable
+@SerialName("tres")
+data class SentAdminTeamResultMessage(val question_id: String,val answer: String, val team_id: String, val correct: Boolean) : SentAdminMessage()
+
+//---------------------------------------------------------------------------//
 
 @Serializable
 sealed class ReceivedUserMessage : WSMessage()
@@ -143,6 +157,7 @@ data class ReceivedUserWrongAnswerMessage(val pl_id: String, val question_id: St
 @SerialName("r_ans")
 data class ReceivedUserRightAnswerMessage(val pl_id: String, val question_id: String,val answer_id: Int) : ReceivedUserMessage()
 
+
 //---------------------------------------------------------------------------//
 
 
@@ -158,7 +173,7 @@ data class SentUserJoinMessage(val pl_id: String, val players: List<Player>) : S
 
 @Serializable
 @SerialName("get_t")
-data class SentUserGetTeamsMessage(val team_ids: List<String>, val team_names: List<String>) : SentUserMessage()
+data class SentUserGetTeamsMessage(val teams: List<Team>) : SentUserMessage()
 
 @Serializable
 @SerialName("pl_con")
@@ -170,8 +185,15 @@ data class SentUserJoinTeamMessage(val team_id: String) : SentUserMessage()
 
 @Serializable
 @SerialName("wr_qst")
-data class SentUserWrongQstMessage(val question_id: List<String>,val string: List<String>) : SentUserMessage()
+data class SentUserWrongQstMessage(val questions: List<Question>) : SentUserMessage()
 
+@Serializable
+@SerialName("wr_ans")
+data class SentUserWrongAnswerSubmittedMessage(val pl_id: String, val question_id: String,val string: String) : SentUserMessage()
+
+@Serializable
+@SerialName("start")
+data class SentUserStartMessage(val num: Int) : SentUserMessage()
 
 @Serializable
 @SerialName("timer_elapsed")
@@ -193,7 +215,14 @@ data class Ans (val key: Int, val value: String)
 @Serializable
 data class Player (val pl_id: String , val nick: String, val team_id: String)
 
+@Serializable
+data class Team (val team_id: String, val team_name: String)
 
+@Serializable
+data class TeamMaxAns(val team_id: String, val value: Int)
+
+@Serializable
+data class Question (val question_id: String, val string: String)
 //return WSMessage( when () {
 //    ErrorEvent.ERROR.event -> ErrorEvent.ERROR
 //    NormalEvent.CREATE.event -> NormalEvent.CREATE

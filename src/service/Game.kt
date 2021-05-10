@@ -14,7 +14,7 @@ import java.util.*
 import kotlin.collections.HashMap
 
 
-class Game(val storage: Storage, val connections: ConnectionManager) {
+class Game(private val storage: Storage, val connections: ConnectionManager) {
     companion object {
         fun getRandomString(length: Int): String {
             val allowedChars = ('A'..'Z')
@@ -32,9 +32,15 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         return Json.encodeToString(e)
     }
 
+    val rightAnswerModifier = 1000;
+    val wrongAnswerModifier = 500;
+
+    data class AnsCorr(val value: String, val correct: Boolean);
     private var jobs = Collections.synchronizedMap<String, HashSet<Job>>(LinkedHashMap())
-    private var gameToQuestionAnswers = Collections.synchronizedMap<String, HashMap<String, Int>>(LinkedHashMap())
+    private var gameToQuestionAnswers =
+        Collections.synchronizedMap<String, HashMap<String, List<AnsCorr>>>(LinkedHashMap())
     private var gameToQuestions = Collections.synchronizedMap<String, HashMap<String, Question>>(LinkedHashMap())
+    private var teamToPlayers = Collections.synchronizedMap<String, MutableList<String>>(LinkedHashMap())
 
     //  val storage: GameStorageInterface = GameStorageInterface(uuid, strg)
     private var stateListeners = hashSetOf<suspend (String, GameState) -> Unit>()
@@ -59,10 +65,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
     init {
         storage += { gameID, cur ->
             when (cur) {
-                GameState.ROUND1 -> {
-                    println("ROUND1")
-                    //storage.shuffleQuestionsByTeams(gameID)
-                }
+                GameState.ROUND1 -> println("ROUND1")
                 GameState.MID -> println("MID")
                 GameState.ROUND2 -> println("ROUND2")
                 GameState.FINISH -> println("FINISH")
@@ -73,8 +76,6 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
 
     private fun createGame(admin_uuid: String, admin_name: String, code: String): String? {
         val id = UUID.randomUUID().toString()
-        val team1 = UUID.randomUUID().toString()
-        val team2 = UUID.randomUUID().toString()
         jobs[id] = hashSetOf()
         storage.addAdmin(admin_uuid, admin_name)
         if (storage.createGame(id, admin_uuid, code)) {
@@ -102,34 +103,40 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
 
     private suspend fun playFirstRound(gameUUID: String, timerInSeconds: Long?) {
         try {
-            val map = distributeQuestions(gameUUID)
+            val (playerToQuest, teamToQuest) = distributeQuestions(gameUUID)
             val job = GlobalScope.launch {
                 delay(timerInSeconds!! * 1000)
                 storage.setStateWithListener(gameUUID, GameState.MID)
-                println("Changed round")
-                for (user in map) {
+                for (user in playerToQuest) {
                     connections.sendToUser(
                         user.key,
                         getJsonUserMessageString(SentUserRoundEndedMessage(1))
                     )
                 }
                 connections.sendToAdmin(
-                    map.keys.first(),
+                    playerToQuest.keys.first(),
                     getJsonAdminMessageString(SentAdminRoundEndedMessage(1)),
                     ConnectionManager.Type.USER
                 )
 
             }
             jobs[gameUUID]?.add(job)
-            for (user in map) {
+            connections.sendToAdmin(
+                storage.getAdmin(gameUUID)!!,
+                getJsonAdminMessageString(
+                    SentAdminMaxAnsMessage(
+                        teamToQuest.toList().map { TeamMaxAns(it.first, it.second.count()) })
+                ),
+                ConnectionManager.Type.ADMIN
+            )
+            for (user in playerToQuest) {
                 val questions = user.value
+
                 connections.sendToUser(
                     user.key,
                     getJsonUserMessageString(
                         SentUserWrongQstMessage(
-                            listOf(questions.map { it.id }.toString()),
-                            listOf(questions.map { it.text }.toString())
-                        )
+                            questions.map { Question(it.id, it.text) })
                     )
                 )
             }
@@ -147,15 +154,16 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
 
     data class QuestionIDnText(val id: String, val text: String)
 
-    private fun distributeQuestions(gameUUID: String): HashMap<String, MutableList<QuestionIDnText>> {
+    public fun distributeQuestions(gameUUID: String): Pair<HashMap<String, MutableList<QuestionIDnText>>, HashMap<String, MutableList<String>>> {
+        println("DISTRIBUTE QUESTIONS CALLED")
         val playerToQuest = hashMapOf<String, MutableList<QuestionIDnText>>()
-
         val questions = storage.getQuestions(gameUUID).shuffled()
-        val teams = storage.getTeamsWithPlayers(gameUUID).onEach { println(it)}
+        val teams = storage.getTeamsWithPlayers(gameUUID)
         val ids = teams.keys
         if (teams.count() == 0) throw ArithmeticException("There are no teams or teams are empty")
         val questPerTeam = questions.size / ids.size
-
+        teams.forEach { teamToPlayers[it.key] = it.value }
+        println("FR TEAMS: $teams")
 //            if(questions.await().size % ids.size != 0)
 //                throw IllegalArgumentException("It`s impossible to divide questions evenly")
         val questIter = questions.listIterator()
@@ -182,11 +190,13 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
             teamToQuest[team] = questionIds
         }
         storage.addQuestionsToTeams(teamToQuest)
-
-        return playerToQuest
+        //teams.forEach{ teamToPlayers.remove(it.key) }
+        return Pair(playerToQuest, teamToQuest)
     }
 
     private suspend fun playSecondRound(gameUUID: String, timerInSeconds: Long?) {
+
+
         if (!gameToQuestions.containsKey(gameUUID)) {
             val hashMap = hashMapOf<String, Question>()
             storage.getQuestions(gameUUID).forEach {
@@ -198,8 +208,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
             gameToQuestionAnswers[gameUUID] = hashMapOf()
         val adminUUID = storage.getAdmin(gameUUID)
         val teams = storage.getTeamsWithPlayers(gameUUID)
-        val kek = storage.getTeamsWithQuestions(gameUUID)
-        val teamsWithQuestions = kek.toList()
+        val teamsWithQuestions = storage.getTeamsWithQuestions(gameUUID).toList()
         val questionCount = teamsWithQuestions.minOf { it.second.count() }
         for (i in 0 until questionCount) {
             teamsWithQuestions.forEachIndexed { index, pair ->
@@ -213,24 +222,8 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                 val question = questions?.get(questionUUIDs[i]) ?: throw SoftException("Couldn't find question")
                 val rightAnswerId = (0 until question.answers.size).random()
                 val ans = formAnswers(question.answers, rightAnswerId) ?: throw SoftException("Couldn't form answers")
-                gameToQuestionAnswers[gameUUID]?.put(question.id, rightAnswerId)
-                connections.sendToUsers(
-                    teams[pair.first] as List<String>, getJsonUserMessageString(
-                        SentUserGetAnswersMessage(
-                            question.text,
-                            question.id,
-                            ans
-                        )
-                    ).also { println(it) }
-                )
-                connections.sendToAdmin(
-                    adminUUID.toString(), getJsonAdminMessageString(
-                        SentAdminGetAnswersMessage(
-                            teamUUID,
-                            question.id,
-                            ans.map { it.value })
-                    ).also { println(it) }, ConnectionManager.Type.ADMIN
-                )
+                gameToQuestionAnswers[gameUUID]?.put(question.id, ans.map { AnsCorr(it.value, it.key == rightAnswerId) })
+                sendDistributedQuestion(teams[pair.first] as List<String>, adminUUID!!, pair.first, question, ans)
             }
             //Delay between sending questions
             delay(timerInSeconds?.times(1000) ?: 0)
@@ -244,6 +237,29 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         )
         storage.setStateWithListener(gameUUID, GameState.FINISH)
 
+    }
+
+    private suspend fun sendDistributedQuestion(
+        playerUUIDs: List<String>, adminUUID: String,
+        teamUUID: String, question: Question, answers: List<Ans>
+    ) {
+        connections.sendToUsers(
+            playerUUIDs, getJsonUserMessageString(
+                SentUserGetAnswersMessage(
+                    question.text,
+                    question.id,
+                    answers
+                )
+            ).also { println(it) }
+        )
+        connections.sendToAdmin(
+            adminUUID, getJsonAdminMessageString(
+                SentAdminGetAnswersMessage(
+                    teamUUID,
+                    question.id,
+                    answers.map { it.value })
+            ).also { println(it) }, ConnectionManager.Type.ADMIN
+        )
     }
 
     private fun formAnswers(answers: List<Answer>, rightAnswerId: Int): List<Ans>? {
@@ -289,15 +305,14 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                             val teams = storage.getTeams(gameUuid)
                             return getJsonUserMessageString(
                                 SentUserGetTeamsMessage(
-                                    teams.keys.toList(),
-                                    teams.values.toList()
+                                    teams.toList().map { Team(it.first, it.second) }
                                 )
                             )
                         }
 
                     }
                     GameState.ROUND1 -> when (message) {
-                        is ReceivedUserWrongAnswerMessage -> handleUserWrongAnswerMessage(message)
+                        is ReceivedUserWrongAnswerMessage -> handleUserWrongAnswerMessage(gameUuid, message)
                     }
                     GameState.ROUND2 -> when (message) {
                         is ReceivedUserRightAnswerMessage -> handleUserRightAnswerMessage(gameUuid, message)
@@ -315,17 +330,58 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         return null
     }
 
-    private fun handleUserRightAnswerMessage(gameUUID: String, message: ReceivedUserRightAnswerMessage) {
+    private suspend fun handleUserRightAnswerMessage(gameUUID: String, message: ReceivedUserRightAnswerMessage) {
         //TODO: Check if user has a right to add an answer
-        if (message.answer_id == gameToQuestionAnswers[gameUUID]?.get(message.question_id))
+        if (gameToQuestionAnswers[gameUUID]?.get(message.question_id)?.get(message.answer_id)?.correct == true) {
             storage.addUserAnswerResult(message.question_id, message.pl_id, true)
-        else
+            connections.sendToAdmin(
+                message.pl_id,
+                getJsonAdminMessageString(
+                    SentAdminTeamResultMessage(
+                        message.question_id,
+                        gameToQuestionAnswers[gameUUID]?.get(message.question_id)?.get(message.answer_id)?.value.toString(),
+                        storage.getUserTeam(message.pl_id).toString(), true
+                    )
+                ), ConnectionManager.Type.USER
+            )
+        } else {
             storage.addUserAnswerResult(message.question_id, message.pl_id, false)
+            connections.sendToAdmin(
+                message.pl_id,
+                getJsonAdminMessageString(
+                    SentAdminTeamResultMessage(
+                        message.question_id,
+                        gameToQuestionAnswers[gameUUID]?.get(message.question_id)?.get(message.answer_id)?.value.toString(),
+                        storage.getUserTeam(message.pl_id).toString(),
+                        false
+                    )
+                ), ConnectionManager.Type.USER
+            )
+        }
     }
 
-    private fun handleUserWrongAnswerMessage(message: ReceivedUserWrongAnswerMessage) {
+    private suspend fun handleUserWrongAnswerMessage(gameUUID: String, message: ReceivedUserWrongAnswerMessage) {
         //TODO: Check if user has a right to add an answer
         storage.addWrongAnswer(message.question_id, message.string, message.pl_id)
+        val team = storage.getUserTeam(message.pl_id)
+        val adminUUID: String = storage.getAdmin(gameUUID).toString()
+        connections.sendToAdmin(
+            adminUUID,
+            getJsonAdminMessageString(SentAdminWrongAnswerMessage(message.pl_id, message.question_id, message.string)),
+            ConnectionManager.Type.ADMIN
+        )
+        teamToPlayers[team]?.let { players ->
+            connections.sendToUsers(
+                players,
+                getJsonUserMessageString(
+                    SentUserWrongAnswerSubmittedMessage(
+                        message.pl_id,
+                        message.question_id,
+                        message.string
+                    )
+                )
+            )
+        }
     }
 
 
@@ -345,13 +401,15 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                     )
                 ), ConnectionManager.Type.USER
             )
-            connections.sendAllUsers(connections.getAdminID(thisConnection.uuid!!).toString(),getJsonUserMessageString(
-                SentUserPlayerConnectedMessage(
-                    message.team_id,
-                    storage.getUserName(thisConnection.uuid!!).toString(),
-                    thisConnection.uuid!!
+            connections.sendAllUsers(
+                connections.getAdminID(thisConnection.uuid!!).toString(), getJsonUserMessageString(
+                    SentUserPlayerConnectedMessage(
+                        message.team_id,
+                        storage.getUserName(thisConnection.uuid!!).toString(),
+                        thisConnection.uuid!!
+                    )
                 )
-            ))
+            )
 
             return getJsonUserMessageString(SentUserJoinTeamMessage(message.team_id))
         }
@@ -375,12 +433,11 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
             adminUuid
         )
         val res = mutableListOf<Player>()
-        players.forEach{ (team, players) ->
-            players.forEach{(id,name) ->
-                res.add(Player(id,name,team))
+        players.forEach { (team, players) ->
+            players.forEach { (id, name) ->
+                res.add(Player(id, name, team))
             }
         }
-        println("handleUserJoinMessage -- players -- $res")
 
         return getJsonUserMessageString(SentUserJoinMessage(thisConnection.uuid!!, res))
 
@@ -405,7 +462,10 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                         return when (message) {
                             is ReceivedAdminAddQstMessage -> handleAdminAddQuestionMessage(gameUUID, message)
                             is ReceivedAdminAddTeamsMessage -> handleAdminAddTeamsMessage(gameUUID, message)
-                            is ReceivedAdminStartRoundMessage -> handleAdminStartRoundMessage(gameUUID, message)
+                            is ReceivedAdminStartRoundMessage -> handleAdminStartRoundMessage(
+                                gameUUID, message,
+                                thisConnection.uuid!!
+                            )
                             is ReceivedAdminCloseMessage -> handleAdminCloseMessage(gameUUID)
                             else -> null
                         }
@@ -425,7 +485,11 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
                     }
                     GameState.MID -> {
                         return when (message) {
-                            is ReceivedAdminStartRoundMessage -> handleAdminStartRoundMessage(gameUUID, message)
+                            is ReceivedAdminStartRoundMessage -> handleAdminStartRoundMessage(
+                                gameUUID,
+                                message,
+                                thisConnection.uuid!!
+                            )
                             is ReceivedAdminCloseMessage -> return handleAdminCloseMessage(gameUUID)
                             else -> null
                         }
@@ -439,7 +503,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
         return null
     }
 
-    private fun handleAdminAddTeamsMessage(gameUUID: String, message: ReceivedAdminAddTeamsMessage): String{
+    private fun handleAdminAddTeamsMessage(gameUUID: String, message: ReceivedAdminAddTeamsMessage): String {
         val ids = mutableListOf<String>()
         message.team_names.forEach { teamName ->
             val teamUUID = UUID.randomUUID().toString()
@@ -491,10 +555,14 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
 
     private suspend fun handleAdminStartRoundMessage(
         gameUUID: String,
-        message: ReceivedAdminStartRoundMessage
+        message: ReceivedAdminStartRoundMessage,
+        adminUUID: String
     ): String {
-        return getJsonAdminMessageString(SentAdminStartMessage(message.num, 20))
-            .also { startRound(gameUUID, message.num, message.timer.toLong()) }
+        return getJsonAdminMessageString(SentAdminStartMessage(message.num))
+            .also {
+                connections.sendAllUsers(adminUUID, getJsonUserMessageString(SentUserStartMessage(message.num)))
+                startRound(gameUUID, message.num, message.timer.toLong())
+            }
     }
 
     private fun handleAdminCloseMessage(gameUUID: String): String {
@@ -514,7 +582,7 @@ class Game(val storage: Storage, val connections: ConnectionManager) {
     }
 
     private fun joinGame(gameID: String, player_uuid: String, name: String, team_uuid: String?): Boolean {
-        storage.addUser(gameID, player_uuid, name, gameID,team_uuid)
+        storage.addUser(gameID, player_uuid, name, gameID, team_uuid)
         return true
     }
 
