@@ -1,6 +1,6 @@
 package com.diploma.store
 
-import com.diploma.WSMessage
+import com.diploma.model.WSMessage
 import com.diploma.model.Question
 import com.diploma.service.GameState
 import java.util.concurrent.ConcurrentHashMap
@@ -26,7 +26,6 @@ class InMemoryStorage : Storage {
         var questions: MutableList<Question>? = mutableListOf()
         var teamToQuestion: HashMap<String, MutableList<Question>> = hashMapOf()
     }
-
 
     override fun createGame(gameUUID: String, admin_uuid: String, code: String): Boolean {
         val game = GameStorage()
@@ -99,12 +98,6 @@ class InMemoryStorage : Storage {
     }
 
 
-    override fun saveEvent(gameUUID: String, message: WSMessage) {
-        games[gameUUID]?.events?.add(message)
-    }
-
-    override fun getHistory(gameUUID: String): List<WSMessage>? =
-        games[gameUUID]?.events?.toList()
 
 
     override fun addAdmin(admin_uuid: String, name: String): Boolean {
@@ -206,7 +199,16 @@ class InMemoryStorage : Storage {
         TODO("Not yet implemented")
     }
 
-    override fun addUserAnswerResult(question_id: String, player_id: String, correct: Boolean): Boolean {
+    override fun addUserAnswerResult(
+        question_id: String,
+        player_id: String,
+        string: String,
+        correct: Boolean
+    ): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    override fun getQuestionResultByMaxAnswered(question_id: String): Pair<String, Boolean>? {
         TODO("Not yet implemented")
     }
 

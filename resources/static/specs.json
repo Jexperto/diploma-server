@@ -1,0 +1,251 @@
+{
+  "/admin": {
+    "send": {
+      "create": {
+        "type": "create",
+        "nick": "AdminNick"
+      },
+      "join": {
+        "type": "join",
+        "admin_id": "ec8e7647905945208c0be04e43e3a2e9"
+      },
+      "add_question": {
+        "type": "add_question",
+        "question": "question",
+        "answer": "answer"
+      },
+      "add_teams": {
+        "type": "add_t",
+        "team_names": [
+          "name1",
+          "name2",
+          "name3"
+        ]
+      },
+      "start_round": {
+        "type": "start",
+        "num": 1,
+        "timer": 60
+      },
+      "get_teams_with_questions": {
+        "type": "get_twq"
+      },
+      "close": {
+        "type": "close"
+      }
+    },
+    "receive": {
+      "error": {
+        "type": "error",
+        "err_desc": "Error description"
+      },
+      "create": {
+        "type": "create",
+        "code": "ABCDEF",
+        "admin_id": "ec8e7647905945208c0be04e43e3a2e9"
+      },
+      "join": {
+        "type": "join",
+        "code": "ABCDEF"
+      },
+      "add_question": {
+        "type": "add_question",
+        "question_id": "123"
+      },
+      "add_teams": {
+        "type": "add_t",
+        "team_ids": [
+          "123",
+          "123",
+          "123"
+        ]
+      },
+      "start_round1": {
+        "type": "start",
+        "num": 1
+      },
+      "round1_max_ans": {
+        "type": "max_ans",
+        "teams": [
+          {
+            "team_id": "123",
+            "value": 123
+          }
+        ]
+      },
+      "start_round2": {
+        "type": "start",
+        "num": 2
+      },
+      "user_added_ans": {
+        "type": "wr_ans",
+        "pl_id": "id",
+        "question_id": "question_id",
+        "answer": "text"
+      },
+      "player_connected": {
+        "type": "pl_con",
+        "team_id": "123",
+        "nick": "nick",
+        "pl_id": "123"
+      },
+      "get_answers": {
+        "type": "ans",
+        "team_id": "123",
+        "question_id": "123",
+        "answers": [
+          "Answer1",
+          "Answer2",
+          "Answer3",
+          "Answer4"
+        ]
+      },
+      "team_ans_res": {
+        "type": "tres",
+        "question_id": "123",
+        "team_id": "123",
+        "answer": "string",
+        "correct": true
+      },
+      "player_ans_res": {
+        "type": "plres",
+        "question_id": "123",
+        "pl_id": "123",
+        "answer": "string",
+        "correct": true
+      },
+      "round_ended": {
+        "type": "rend",
+        "num": 1
+      },
+      "get_teams_with_questions": {
+        "type": "get_twq",
+        "values": [
+          {
+            "team_id": "123",
+            "question_ids": [
+              "123",
+              "123"
+            ]
+          }
+        ]
+      },
+      "close": {
+        "type": "close"
+      }
+    }
+  },
+  "/users": {
+    "send": {
+      "join": {
+        "type": "join",
+        "nick": "name",
+        "code": "ABCDEF"
+      },
+      "get_teams": {
+        "type": "get_t"
+      },
+      "join_team": {
+        "type": "join_t",
+        "team_id": "123"
+      },
+      "1st_round_wrong_answer": {
+        "type": "wr_ans",
+        "pl_id": "123",
+        "question_id": "123",
+        "string": "Answer"
+      },
+      "2nd_round_right_answer": {
+        "type": "r_ans",
+        "pl_id": "123",
+        "question_id": "123",
+        "answer_id": 1
+      }
+    },
+    "receive": {
+      "join": {
+        "type": "join",
+        "pl_id": "123",
+        "players": [
+          {
+            "pl_id": "id",
+            "nick": "name",
+            "team_id": "id"
+          }
+        ]
+      },
+      "get_teams": {
+        "type": "get_t",
+        "teams": [
+          {
+            "team_id": "id",
+            "team_name": "name"
+          }
+        ]
+      },
+      "start_round1": {
+        "type": "start",
+        "num": 1
+      },
+      "start_round2": {
+        "type": "start",
+        "num": 2
+      },
+      "join_team": {
+        "type": "join_t",
+        "team_id": "123"
+      },
+      "1st_round_get_wrong_quest": {
+        "type": "wr_qst",
+        "questions": [
+          {
+            "question_id": "123",
+            "string": "qst"
+          }
+        ]
+      },
+      "timer_elapsed": {
+        "type": "timer_elapsed"
+      },
+      "round_ended": {
+        "type": "rend",
+        "num": 1
+      },
+      "1st_round_wrong_answer_submitted_by_teammate": {
+        "type": "wr_ans",
+        "pl_id": "123",
+        "question_id": "123",
+        "string": "Answer"
+      },
+      "get_answers": {
+        "type": "ans",
+        "question": "Question",
+        "question_id": "123",
+        "answers": [
+          {
+            "key": 0,
+            "value": "Answer"
+          },
+          {
+            "key": 1,
+            "value": "Answer"
+          },
+          {
+            "key": 2,
+            "value": "Answer"
+          },
+          {
+            "key": 3,
+            "value": "Answer"
+          }
+        ]
+      },
+      "player_connected": {
+        "type": "pl_con",
+        "team_id": "123",
+        "nick": "nick",
+        "pl_id": "123"
+      }
+    }
+  }
+}

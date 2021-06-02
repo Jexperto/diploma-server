@@ -1,8 +1,7 @@
 package com.diploma.service
 
 import com.diploma.*
-import com.diploma.model.Answer
-import com.diploma.model.Question
+import com.diploma.model.*
 import com.diploma.store.Storage
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -14,7 +13,11 @@ import java.util.*
 import kotlin.collections.HashMap
 
 
-class Game(private val storage: Storage, val connections: ConnectionManager) {
+class Game(
+    private val storage: Storage,
+    val connections: ConnectionManager,
+    private val wrongAnswerTargetCount: Int = 3
+) {
     companion object {
         fun getRandomString(length: Int): String {
             val allowedChars = ('A'..'Z')
@@ -31,9 +34,6 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
     private fun getJsonUserMessageString(e: SentUserMessage): String {
         return Json.encodeToString(e)
     }
-
-    val rightAnswerModifier = 1000;
-    val wrongAnswerModifier = 500;
 
     data class AnsCorr(val value: String, val correct: Boolean);
     private var jobs = Collections.synchronizedMap<String, HashSet<Job>>(LinkedHashMap())
@@ -86,7 +86,7 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
     }
 
 
-    suspend fun startRound(gameUUID: String, roundNumber: Int, timerInSeconds: Long?) {
+    private suspend fun startRound(gameUUID: String, roundNumber: Int, timerInSeconds: Long?) {
         when (roundNumber) {
             1 -> {
                 storage.setStateWithListener(gameUUID, GameState.ROUND1)
@@ -104,6 +104,8 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
     private suspend fun playFirstRound(gameUUID: String, timerInSeconds: Long?) {
         try {
             val (playerToQuest, teamToQuest) = distributeQuestions(gameUUID)
+            println("playerToQuest -- $playerToQuest")
+            println("teamToQuest -- $teamToQuest")
             val job = GlobalScope.launch {
                 delay(timerInSeconds!! * 1000)
                 storage.setStateWithListener(gameUUID, GameState.MID)
@@ -125,7 +127,7 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
                 storage.getAdmin(gameUUID)!!,
                 getJsonAdminMessageString(
                     SentAdminMaxAnsMessage(
-                        teamToQuest.toList().map { TeamMaxAns(it.first, it.second.count()) })
+                        teamToQuest.toList().map { TeamMaxAns(it.first, it.second.count() * (wrongAnswerTargetCount)) })
                 ),
                 ConnectionManager.Type.ADMIN
             )
@@ -136,7 +138,7 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
                     user.key,
                     getJsonUserMessageString(
                         SentUserWrongQstMessage(
-                            questions.map { Question(it.id, it.text) })
+                            questions.map { QuestionMsg(it.id, it.text) })
                     )
                 )
             }
@@ -154,7 +156,7 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
 
     data class QuestionIDnText(val id: String, val text: String)
 
-    public fun distributeQuestions(gameUUID: String): Pair<HashMap<String, MutableList<QuestionIDnText>>, HashMap<String, MutableList<String>>> {
+    private fun distributeQuestions(gameUUID: String): Pair<HashMap<String, MutableList<QuestionIDnText>>, HashMap<String, MutableList<String>>> {
         println("DISTRIBUTE QUESTIONS CALLED")
         val playerToQuest = hashMapOf<String, MutableList<QuestionIDnText>>()
         val questions = storage.getQuestions(gameUUID).shuffled()
@@ -162,13 +164,12 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
         val ids = teams.keys
         if (teams.count() == 0) throw ArithmeticException("There are no teams or teams are empty")
         val questPerTeam = questions.size / ids.size
-        teams.forEach { teamToPlayers[it.key] = it.value }
+        teams.forEach { teamToPlayers[it.key] = it.value } //????
         println("FR TEAMS: $teams")
 //            if(questions.await().size % ids.size != 0)
 //                throw IllegalArgumentException("It`s impossible to divide questions evenly")
         val questIter = questions.listIterator()
         val teamToQuest = hashMapOf<String, MutableList<String>>()
-
         for (team in ids) {
             val questionIds = mutableListOf<String>()
             val players = teams[team]!!
@@ -178,14 +179,16 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
                     break
                 val q = questIter.next()
                 questionIds.add(q.id)
-                val currPlayer = players[currentPlayerID]
-                if (!playerToQuest.contains(currPlayer))
-                    playerToQuest[currPlayer] = mutableListOf()
-                val qList = playerToQuest[currPlayer]!!
-                qList.add(QuestionIDnText(q.id, q.text))
-                currentPlayerID++
-                if (currentPlayerID == players.size)
-                    currentPlayerID = 0
+                for (ansCount in 0 until wrongAnswerTargetCount) {
+                    val currPlayer = players[currentPlayerID]
+                    if (!playerToQuest.contains(currPlayer))
+                        playerToQuest[currPlayer] = mutableListOf()
+                    val qList = playerToQuest[currPlayer]!!
+                    qList.add(QuestionIDnText(q.id, q.text))
+                    currentPlayerID++
+                    if (currentPlayerID == players.size)
+                        currentPlayerID = 0
+                }
             }
             teamToQuest[team] = questionIds
         }
@@ -196,20 +199,22 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
 
     private suspend fun playSecondRound(gameUUID: String, timerInSeconds: Long?) {
 
-
         if (!gameToQuestions.containsKey(gameUUID)) {
             val hashMap = hashMapOf<String, Question>()
             storage.getQuestions(gameUUID).forEach {
                 hashMap[it.id] = it
             }
             gameToQuestions[gameUUID] = hashMap
+            println("gameToQuestions2ndRound -- ${gameToQuestions[gameUUID]}")
         }
         if (!gameToQuestionAnswers.containsKey(gameUUID))
             gameToQuestionAnswers[gameUUID] = hashMapOf()
-        val adminUUID = storage.getAdmin(gameUUID)
+        val adminUUID = storage.getAdmin(gameUUID)!!
         val teams = storage.getTeamsWithPlayers(gameUUID)
-        val teamsWithQuestions = storage.getTeamsWithQuestions(gameUUID).toList()
-        val questionCount = teamsWithQuestions.minOf { it.second.count() }
+        val teamsWithQuestions =
+            storage.getTeamsWithQuestions(gameUUID).toList().onEach { println("teamWithQuestion2ndRound -- $it") }
+        val questionCount =
+            teamsWithQuestions.minOf { it.second.count() }.also { println("questionCount2ndRound -- $it") }
         for (i in 0 until questionCount) {
             teamsWithQuestions.forEachIndexed { index, pair ->
                 val tIdx: Int = if (index + 1 < teamsWithQuestions.count())
@@ -220,29 +225,51 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
                 val questionUUIDs = pair.second
                 val questions = gameToQuestions[gameUUID]
                 val question = questions?.get(questionUUIDs[i]) ?: throw SoftException("Couldn't find question")
+                println("question2ndRound -- $question")
                 val rightAnswerId = (0 until question.answers.size).random()
                 val ans = formAnswers(question.answers, rightAnswerId) ?: throw SoftException("Couldn't form answers")
-                gameToQuestionAnswers[gameUUID]?.put(question.id, ans.map { AnsCorr(it.value, it.key == rightAnswerId) })
-                sendDistributedQuestion(teams[pair.first] as List<String>, adminUUID!!, pair.first, question, ans)
+                println("ans2ndRound -- $ans")
+                gameToQuestionAnswers[gameUUID]?.put(
+                    question.id,
+                    ans.map { AnsCorr(it.value, it.key == rightAnswerId) })
+                sendDistributedQuestion(teams[teamUUID] as List<String>, adminUUID, teamUUID, question, ans)
             }
             //Delay between sending questions
             delay(timerInSeconds?.times(1000) ?: 0)
+            for ((index, value) in teamsWithQuestions.withIndex()) {
+                val tIdx: Int = if (index + 1 < teamsWithQuestions.count())
+                    index + 1
+                else
+                    0
+                val team = teamsWithQuestions[tIdx].first
+                val question = value.second[i]
+                val res = storage.getQuestionResultByMaxAnswered(question)
+                connections.sendToAdmin(
+                    adminUUID,
+                    getJsonAdminMessageString(
+                        SentAdminTeamResultMessage(
+                            question, res!!.first,
+                            team, res.second
+                        )
+                    ), ConnectionManager.Type.ADMIN
+                )
+            }
         }
+
         //Finishing Round
         connections.sendToAdmin(
-            adminUUID.toString(), getJsonAdminMessageString(SentAdminRoundEndedMessage(2)), ConnectionManager.Type.ADMIN
+            adminUUID, getJsonAdminMessageString(SentAdminRoundEndedMessage(2)), ConnectionManager.Type.ADMIN
         )
         connections.sendAllUsers(
-            adminUUID.toString(), getJsonUserMessageString(SentUserRoundEndedMessage(2))
+            adminUUID, getJsonUserMessageString(SentUserRoundEndedMessage(2))
         )
         storage.setStateWithListener(gameUUID, GameState.FINISH)
 
     }
 
-    private suspend fun sendDistributedQuestion(
-        playerUUIDs: List<String>, adminUUID: String,
-        teamUUID: String, question: Question, answers: List<Ans>
-    ) {
+    private suspend fun sendDistributedQuestion(playerUUIDs: List<String>, adminUUID: String, teamUUID: String, question: Question, answers: List<Ans>) {
+        println("playerUUIDs $playerUUIDs")
+        println("question $question")
         connections.sendToUsers(
             playerUUIDs, getJsonUserMessageString(
                 SentUserGetAnswersMessage(
@@ -323,7 +350,7 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
                     }
                 }
 
-                println(thisConnection.uuid.toString())
+//                println(thisConnection.uuid.toString())
 
             }
         }
@@ -332,27 +359,28 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
 
     private suspend fun handleUserRightAnswerMessage(gameUUID: String, message: ReceivedUserRightAnswerMessage) {
         //TODO: Check if user has a right to add an answer
+        val answerText = gameToQuestionAnswers[gameUUID]?.get(message.question_id)
+            ?.get(message.answer_id)?.value.toString()
         if (gameToQuestionAnswers[gameUUID]?.get(message.question_id)?.get(message.answer_id)?.correct == true) {
-            storage.addUserAnswerResult(message.question_id, message.pl_id, true)
+            storage.addUserAnswerResult(message.question_id, message.pl_id, answerText, true)
             connections.sendToAdmin(
                 message.pl_id,
                 getJsonAdminMessageString(
-                    SentAdminTeamResultMessage(
-                        message.question_id,
-                        gameToQuestionAnswers[gameUUID]?.get(message.question_id)?.get(message.answer_id)?.value.toString(),
-                        storage.getUserTeam(message.pl_id).toString(), true
+                    SentAdminPlayerResultMessage(
+                        message.question_id, answerText,
+                        message.pl_id, true
                     )
                 ), ConnectionManager.Type.USER
             )
         } else {
-            storage.addUserAnswerResult(message.question_id, message.pl_id, false)
+            storage.addUserAnswerResult(message.question_id, message.pl_id, answerText, false)
             connections.sendToAdmin(
                 message.pl_id,
                 getJsonAdminMessageString(
-                    SentAdminTeamResultMessage(
+                    SentAdminPlayerResultMessage(
                         message.question_id,
-                        gameToQuestionAnswers[gameUUID]?.get(message.question_id)?.get(message.answer_id)?.value.toString(),
-                        storage.getUserTeam(message.pl_id).toString(),
+                        answerText,
+                        message.pl_id,
                         false
                     )
                 ), ConnectionManager.Type.USER
@@ -467,6 +495,10 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
                                 thisConnection.uuid!!
                             )
                             is ReceivedAdminCloseMessage -> handleAdminCloseMessage(gameUUID)
+                            is ReceivedGetTeamsWithQuestionsMessage -> handleAdminErrorMessage(
+                                gameUUID,
+                                "Questions are not yet distributed"
+                            )
                             else -> null
                         }
 
@@ -474,12 +506,17 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
                     GameState.ROUND1 -> {
                         return when (message) {
                             is ReceivedAdminCloseMessage -> handleAdminCloseMessage(gameUUID)
+                            is ReceivedGetTeamsWithQuestionsMessage -> handleAdminErrorMessage(
+                                gameUUID,
+                                "Questions are not yet distributed"
+                            )
                             else -> null
                         }
                     }
                     GameState.ROUND2 -> {
                         return when (message) {
                             is ReceivedAdminCloseMessage -> handleAdminCloseMessage(gameUUID)
+                            is ReceivedGetTeamsWithQuestionsMessage -> handleAdminTeamsWithQuestionsMessage(gameUUID)
                             else -> null
                         }
                     }
@@ -491,6 +528,7 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
                                 thisConnection.uuid!!
                             )
                             is ReceivedAdminCloseMessage -> return handleAdminCloseMessage(gameUUID)
+                            is ReceivedGetTeamsWithQuestionsMessage -> handleAdminTeamsWithQuestionsMessage(gameUUID)
                             else -> null
                         }
                     }
@@ -501,6 +539,24 @@ class Game(private val storage: Storage, val connections: ConnectionManager) {
             }
         }
         return null
+    }
+
+    private fun handleAdminErrorMessage(gameUUID: String, description: String): String {
+        return (Json {
+            serializersModule = SerializersModule {
+                polymorphic(WSMessage::class) {
+                    subclass(WSErrorMessage::class)
+                }
+            }
+        }.encodeToString(WSErrorMessage(description) as WSMessage))
+    }
+
+    private fun handleAdminTeamsWithQuestionsMessage(gameUUID: String): String? {
+        val twq = storage.getTeamsWithQuestions(gameUUID)
+        return getJsonAdminMessageString(
+            SentAdminGetTeamsWithQuestionsMessage(
+                twq.toList().map { TeamsWithQuestions(it.first, it.second) })
+        )
     }
 
     private fun handleAdminAddTeamsMessage(gameUUID: String, message: ReceivedAdminAddTeamsMessage): String {
