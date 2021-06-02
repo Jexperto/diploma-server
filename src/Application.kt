@@ -1,7 +1,11 @@
 package com.diploma
 
+import com.diploma.model.ReceivedAdminMessage
+import com.diploma.model.ReceivedUserMessage
+import com.diploma.model.WSErrorMessage
+import com.diploma.model.WSMessage
 import com.diploma.service.Game
-import com.diploma.store.InMemoryBD
+import com.diploma.store.DataBaseStorage
 import com.diploma.store.Storage
 import io.ktor.application.*
 import io.ktor.http.*
@@ -17,10 +21,11 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 import org.sqlite.JDBC
+import java.io.File
 import java.sql.DriverManager
 import java.time.Duration
 
-val storage: Storage = InMemoryBD()
+val storage: Storage = DataBaseStorage()
 val connections = ConnectionManager()
 val game = Game(storage, connections)
 fun main(args: Array<String>) {
@@ -40,21 +45,14 @@ fun Application.server(testing: Boolean = false) {
 
     routing {
 
-
         val errorSerializer = SerializersModule {
             polymorphic(WSMessage::class) {
                 subclass(WSErrorMessage::class)
             }
         }
         fun getJsonErrorString(e: String): String{
-            return Json{serializersModule = errorSerializer}.encodeToString(WSErrorMessage(e)as WSMessage)
+            return Json{serializersModule = errorSerializer}.encodeToString(WSErrorMessage(e) as WSMessage)
         }
-
-        get("/") {
-            call.respondText("HELLO WORLD!", contentType = ContentType.Text.Plain)
-        }
-
-        // Static feature. Try to access `/static/ktor_logo.svg`
         static("/static") {
             resources("static")
         }

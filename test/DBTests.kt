@@ -4,14 +4,12 @@ import com.diploma.model.Answer
 import com.diploma.model.Question
 import com.diploma.service.Game
 import com.diploma.service.GameState
-import com.diploma.store.InMemoryBD
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import com.diploma.store.DataBaseStorage
 import kotlin.test.*
 import java.util.*
 
 class DBTests {
-    val bd = InMemoryBD()
+    val bd = DataBaseStorage()
 
     @Test
     fun testBD() {
@@ -226,9 +224,9 @@ class DBTests {
 //            succ = bd.addWrongAnswer(question.id, "Wrong2Answer$i", team1PlayerList[2])
         }
 
-        val (a, b) = gameInstance.distributeQuestions(game)
-        a.forEach { println("${it.key} -- ${it.value}") }
-        b.forEach { println("${it.key} -- ${it.value}") }
+        //val (a, b) = gameInstance.distributeQuestions(game)
+//        a.forEach { println("${it.key} -- ${it.value}") }
+//        b.forEach { println("${it.key} -- ${it.value}") }
         bd.executeQuery("select * from TeamsToQuestions;")
 
     }

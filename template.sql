@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS PlayersToQuestionsResults
 (
     player_id     TEXT not null,
     question_id TEXT not null,
+    string      TEXT not null,
     result      BOOLEAN,
     primary key (player_id, question_id),
     foreign key (player_id)
@@ -98,6 +99,7 @@ CREATE TABLE IF NOT EXISTS PlayersToQuestionsResults
 
 );
 
+select * from (select team_id from PlayersToQuestionsResults,TeamsToQuestions);
 
 select question_id, answer, false as valid
 from Wrong_Answers,

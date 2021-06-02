@@ -1,6 +1,5 @@
 package com.diploma.store
 
-import com.diploma.WSMessage
 import com.diploma.model.Question
 import com.diploma.service.GameState
 
@@ -13,11 +12,9 @@ interface Storage {
     fun removeGame(gameUUID: String): Boolean
 
     fun getGameCode(gameUUID: String): String?
-    fun saveEvent(gameUUID: String, message: WSMessage)
-    fun getHistory(gameUUID: String): List<WSMessage>?
     fun addAdmin(admin_uuid: String,name: String): Boolean
     fun getAdminName(admin_uuid: String): String?
-    fun getAdmin(gameUUID: String,) : String?
+    fun getAdmin(gameUUID: String) : String?
     fun removeAdmin(gameUUID: String,admin_uuid: String) : Boolean
 
     fun addUser(gameUUID: String, player_id: String, name: String,room_id:String, team_id: String?): Boolean
@@ -34,8 +31,8 @@ interface Storage {
 
     fun addQuestion(gameUUID: String, question_id: String, right_answer: String, question: String): Boolean
     fun addWrongAnswer(question_id: String, answer: String, player_id: String): Boolean
-    fun addUserAnswerResult(question_id: String, player_id: String, correct: Boolean): Boolean
-
+    fun addUserAnswerResult(question_id: String, player_id: String, string: String, correct: Boolean): Boolean
+    fun getQuestionResultByMaxAnswered(question_id: String): Pair<String, Boolean>?
 
     fun getTeamsWithPlayersAndNames(gameUUID: String): HashMap<String, MutableList<Pair<String,String>>>
     fun getTeamsWithPlayers(gameUUID: String) : HashMap<String, MutableList<String>>
