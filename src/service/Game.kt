@@ -150,7 +150,7 @@ class Game(
                         subclass(WSErrorMessage::class)
                     }
                 }
-            }.encodeToString(WSErrorMessage(e.message.toString()) as WSMessage)), ConnectionManager.Type.ADMIN)
+            }.encodeToString(WSErrorMessage(GenericError(e.message.toString())) as WSMessage)), ConnectionManager.Type.ADMIN)
         }
     }
 
@@ -248,8 +248,8 @@ class Game(
                     adminUUID,
                     getJsonAdminMessageString(
                         SentAdminTeamResultMessage(
-                            question, res!!.first,
-                            team, res.second
+                            question, res?.first ?: "", //TODO: fix
+                            team, res?.second ?: false
                         )
                     ), ConnectionManager.Type.ADMIN
                 )
@@ -390,7 +390,8 @@ class Game(
 
     private suspend fun handleUserWrongAnswerMessage(gameUUID: String, message: ReceivedUserWrongAnswerMessage) {
         //TODO: Check if user has a right to add an answer
-        storage.addWrongAnswer(message.question_id, message.string, message.pl_id)
+        if (message.string.isEmpty()) throw WrongAnswerErrorSoftException(message.question_id).also { println("WrongAnswerStringEmpty") }
+        if (!storage.addWrongAnswer(message.question_id, message.string, message.pl_id)) throw WrongAnswerErrorSoftException(message.question_id).also { println("WrongAnswerDatabaseError") }
         val team = storage.getUserTeam(message.pl_id)
         val adminUUID: String = storage.getAdmin(gameUUID).toString()
         connections.sendToAdmin(
@@ -548,7 +549,7 @@ class Game(
                     subclass(WSErrorMessage::class)
                 }
             }
-        }.encodeToString(WSErrorMessage(description) as WSMessage))
+        }.encodeToString(WSErrorMessage(GenericError(description)) as WSMessage))
     }
 
     private fun handleAdminTeamsWithQuestionsMessage(gameUUID: String): String? {

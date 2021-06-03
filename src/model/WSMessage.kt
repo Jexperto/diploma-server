@@ -27,13 +27,25 @@ enum class ErrorEvent(val event: String) : EventType {
     NULL("null"),
 }
 
+@Serializable
+enum class ErrorPayload{
+    wr_ans
+}
 
 @Serializable
 abstract class WSMessage
 
+@Serializable
+sealed class WSError
+
+@Serializable
+data class GenericError(val text: String) : WSError()
+@Serializable
+data class WrongAnswerError(val question_id: String, val code: Int?, val text: String?=null) : WSError()
+
 @SerialName("error")
 @Serializable
-data class WSErrorMessage(var err_desc: String) : WSMessage()
+data class WSErrorMessage(val err_desc: WSError, val payload: ErrorPayload? = null) : WSMessage()
 
 @Serializable
 sealed class ReceivedAdminMessage : WSMessage()

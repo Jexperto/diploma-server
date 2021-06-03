@@ -1,9 +1,6 @@
 package com.diploma
 
-import com.diploma.model.ReceivedAdminMessage
-import com.diploma.model.ReceivedUserMessage
-import com.diploma.model.WSErrorMessage
-import com.diploma.model.WSMessage
+import com.diploma.model.*
 import com.diploma.service.Game
 import com.diploma.store.DataBaseStorage
 import com.diploma.store.Storage
@@ -51,7 +48,7 @@ fun Application.server(testing: Boolean = false) {
             }
         }
         fun getJsonErrorString(e: String): String{
-            return Json{serializersModule = errorSerializer}.encodeToString(WSErrorMessage(e) as WSMessage)
+            return Json{serializersModule = errorSerializer}.encodeToString(WSErrorMessage(GenericError(e))as WSMessage)
         }
         static("/static") {
             resources("static")
@@ -81,6 +78,10 @@ fun Application.server(testing: Boolean = false) {
                         println(repl)
                         send(Frame.Text(getJsonErrorString(repl)))
                     }
+                    catch (e: WrongAnswerErrorSoftException) {
+                        println("WrongAnswerErrorSoftException: ${e.message}, ${e.question_id}, ${e.code}")
+                        send(Json{serializersModule = errorSerializer}.encodeToString(WSErrorMessage(WrongAnswerError(e.question_id,e.code,e.message),ErrorPayload.wr_ans)as WSMessage))
+                    }
                     catch (e: SoftException) {
                         println(e.message)
                         send(Frame.Text(getJsonErrorString(e.message.toString())))
@@ -100,7 +101,6 @@ fun Application.server(testing: Boolean = false) {
             val thisConnection = Connection(this, null)
             println("Created $thisConnection")
             try {
-               // send("You are connected! There are ${game.connections.count()} users here.")
                 for (frame in incoming) {
                     frame as? Frame.Text ?: continue
                     val msg = frame.readText()
@@ -142,4 +142,5 @@ fun Application.server(testing: Boolean = false) {
 
 
 class ConnectionException(message: String?) : Exception(message) {}
-class SoftException(message: String?) : Exception(message) {}
+open class SoftException(message: String?) : Exception(message) {}
+class WrongAnswerErrorSoftException(val question_id:String, val code:Int? = null, text: String? = null) : SoftException(text) {}
