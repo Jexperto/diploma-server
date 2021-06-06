@@ -81,6 +81,10 @@ data class ReceivedAdminAddTeamsMessage(val team_names: List<String>) : Received
 @SerialName("start")
 data class ReceivedAdminStartRoundMessage(val num: Int, val timer: Int) : ReceivedAdminMessage()
 
+@Serializable
+@SerialName("skip")
+object ReceivedAdminSkipRoundMessage : ReceivedAdminMessage()
+
 
 //---------------------------------------------------------------------------//
 

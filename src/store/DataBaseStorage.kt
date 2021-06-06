@@ -567,6 +567,24 @@ class DataBaseStorage : Storage {
         }
     }
 
+    override fun getPlayerIds(gameUUID: String): List<String> {
+        return try {
+            val list = mutableListOf<String>()
+            val stmt = connection.prepareStatement("select Players.id from Players where Players.room_id == ?;")
+            stmt.setString(1, gameUUID)
+            val res = stmt.executeQuery()
+            while (res.next()) {
+                val playerID = res.getString(1)
+                list.add(playerID)
+            }
+            stmt.close()
+            return list
+        } catch (e: Exception) {
+           listOf()
+        }
+    }
+
+
     override fun getTeamIds(gameUUID: String): MutableList<String> {
         return try {
             val teams = mutableListOf<String>()
