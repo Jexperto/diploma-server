@@ -50,4 +50,5 @@ interface Storage {
 
     fun setTeamPoints(gameUUID: String, team_uuid: String, value: Int): Boolean
     fun getTeamPoints(gameUUID: String, team_uuid: String): Boolean
+    fun getPlayerIds(gameUUID: String): List<String>
 }

@@ -108,7 +108,7 @@ class Game(
             println("teamToQuest -- $teamToQuest")
             val job = GlobalScope.launch {
                 delay(timerInSeconds!! * 1000)
-                storage.setStateWithListener(gameUUID, GameState.MID)
+                 storage.setStateWithListener(gameUUID, GameState.MID)
                 for (user in playerToQuest) {
                     connections.sendToUser(
                         user.key,
@@ -507,6 +507,7 @@ class Game(
                     GameState.ROUND1 -> {
                         return when (message) {
                             is ReceivedAdminCloseMessage -> handleAdminCloseMessage(gameUUID)
+                            is ReceivedAdminSkipRoundMessage -> handleAdminSkipMessage(gameUUID,1);
                             is ReceivedGetTeamsWithQuestionsMessage -> handleAdminErrorMessage(
                                 gameUUID,
                                 "Questions are not yet distributed"
@@ -516,6 +517,7 @@ class Game(
                     }
                     GameState.ROUND2 -> {
                         return when (message) {
+                            is ReceivedAdminSkipRoundMessage -> handleAdminSkipMessage(gameUUID,2);
                             is ReceivedAdminCloseMessage -> handleAdminCloseMessage(gameUUID)
                             is ReceivedGetTeamsWithQuestionsMessage -> handleAdminTeamsWithQuestionsMessage(gameUUID)
                             else -> null
@@ -636,6 +638,35 @@ class Game(
         gameToQuestionAnswers.remove(gameUUID)
 
         return getJsonAdminMessageString(SentAdminCloseMessage)
+    }
+
+    private suspend fun handleAdminSkipMessage(gameUUID: String, roundNumber: Int): String? {
+
+        if (roundNumber == 1){
+            jobs[gameUUID]?.forEach { it.cancel() }
+            storage.setStateWithListener(gameUUID, GameState.MID)
+            for (user in storage.getPlayerIds(gameUUID)) {
+                connections.sendToUser(
+                    user,
+                    getJsonUserMessageString(SentUserRoundEndedMessage(1))
+                )
+            }
+            return getJsonAdminMessageString(SentAdminRoundEndedMessage(1))
+
+        }
+        if (roundNumber == 2){
+            jobs[gameUUID]?.forEach { it.cancel() }
+            storage.setStateWithListener(gameUUID, GameState.FINISH)
+            for (user in storage.getPlayerIds(gameUUID)) {
+                connections.sendToUser(
+                    user,
+                    getJsonUserMessageString(SentUserRoundEndedMessage(2))
+                )
+            }
+            return getJsonAdminMessageString(SentAdminRoundEndedMessage(2))
+
+        }
+        return null
     }
 
     private fun joinGame(gameID: String, player_uuid: String, name: String, team_uuid: String?): Boolean {

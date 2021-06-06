@@ -87,6 +87,10 @@ class InMemoryStorage : Storage {
         TODO("Not yet implemented")
     }
 
+    override fun getPlayerIds(gameUUID: String): List<String> {
+        TODO("Not yet implemented")
+    }
+
     override fun getState(gameUUID: String): GameState? {
         return games[gameUUID]?.state
     }

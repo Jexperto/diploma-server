@@ -27,6 +27,9 @@
         "num": 1,
         "timer": 60
       },
+      "skip_round_time": {
+        "type": "skip"
+      },
       "get_teams_with_questions": {
         "type": "get_twq"
       },
